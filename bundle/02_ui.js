@@ -1,49 +1,66 @@
-// UI.js — Combined badge: Poll Jobs mode + Poll Schedules mode
-// v2: No stop button. Extension always runs. Button is status-only while scanning.
+// ui.js — Badge UI with city selector panel
 
-const STATUS = {
-  SCANNING:   { label: 'Scanning Jobs\u2026',         color: '#00c853', pulse: true  },
-  POLLING:    { label: 'Polling Schedules\u2026',      color: '#00c853', pulse: true  },
-  SCHEDULING: { label: 'Fetching Schedule\u2026',      color: '#ff9100', pulse: true  },
-  APPLYING:   { label: 'Creating Application\u2026',   color: '#2979ff', pulse: true  },
-  QUESTIONS:  { label: 'Answering Questions\u2026',    color: '#aa00ff', pulse: true  },
-  APPLIED:    { label: 'Job Applied \u2713',           color: '#00897b', pulse: false },
-  IDLE:       { label: 'Idle \u2014 Starting\u2026',   color: '#9e9e9e', pulse: false },
-  STOPPED:    { label: 'Restarting\u2026',             color: '#ff9100', pulse: true  },
-  NO_JOB_ID:  { label: 'Enter a Job ID first',        color: '#ef5350', pulse: false },
+const PRESET_CITIES = [
+  // Ontario
+  'Brampton', 'Mississauga', 'Etobicoke', 'Concord', 'Oakville', 'Cambridge',
+  'Kitchener', 'Hamilton', 'Stony Creek', 'Scarborough', 'Toronto', 'Richmond Hill',
+  'Whitby', 'Ajax', 'Bolton', 'St Thomas', 'London', 'Windsor', 'Belleville',
+  'Ottawa', 'Barrhaven',
+  // Alberta
+  'Edmonton', 'Acheson', 'Nisku', 'Calgary', 'Balzac', 'Rocky View County',
+  // British Columbia
+  'Sidney', 'Delta', 'Burnaby', 'Langley', 'Richmond', 'New Westminster',
+  'Pitt Meadows', 'Coquitlam', 'Tsawwassen First Nation',
+  // Nova Scotia
+  'Dartmouth',
+  // Manitoba
+  'Winnipeg',
+];
+
+const PROVINCE_GROUPS = {
+  'Ontario': ['Brampton', 'Mississauga', 'Etobicoke', 'Concord', 'Oakville', 'Cambridge', 'Kitchener', 'Hamilton', 'Stony Creek', 'Scarborough', 'Toronto', 'Richmond Hill', 'Whitby', 'Ajax', 'Bolton', 'St Thomas', 'London', 'Windsor', 'Belleville', 'Ottawa', 'Barrhaven'],
+  'Alberta': ['Edmonton', 'Acheson', 'Nisku', 'Calgary', 'Balzac', 'Rocky View County'],
+  'British Columbia': ['Sidney', 'Delta', 'Burnaby', 'Langley', 'Richmond', 'New Westminster', 'Pitt Meadows', 'Coquitlam', 'Tsawwassen First Nation'],
+  'Nova Scotia': ['Dartmouth'],
+  'Manitoba': ['Winnipeg'],
 };
 
-// MODE: 'jobs' = poll jobs by city, 'schedules' = poll schedules by job id
-window.JS_MODE         = 'jobs';
-window.JS_CITY_FILTER  = '';
+const STORAGE_KEY_CITIES = 'ap_selected_cities';
+const STORAGE_KEY_MODE = 'ap_mode';
+const STORAGE_KEY_JOBID = 'ap_job_id';
+
+const STATUS = {
+  SCANNING: { label: 'Scanning Jobs\u2026', color: '#00c853', pulse: true },
+  POLLING: { label: 'Polling Schedules\u2026', color: '#00c853', pulse: true },
+  SCHEDULING: { label: 'Fetching Schedule\u2026', color: '#ff9100', pulse: true },
+  APPLYING: { label: 'Creating Application\u2026', color: '#2979ff', pulse: true },
+  QUESTIONS: { label: 'Answering Questions\u2026', color: '#aa00ff', pulse: true },
+  APPLIED: { label: 'Job Applied \u2713', color: '#00897b', pulse: false },
+  IDLE: { label: 'Idle \u2014 Starting\u2026', color: '#9e9e9e', pulse: false },
+  STOPPED: { label: 'Restarting\u2026', color: '#ff9100', pulse: true },
+  NO_JOB_ID: { label: 'Enter a Job ID first', color: '#ef5350', pulse: false },
+};
+
+window.JS_MODE = 'jobs';
 window.JS_CITY_FILTERS = [];
-window.JS_JOB_ID       = '';
+window.JS_CITY_FILTER = '';
+window.JS_JOB_ID = '';
 
-function parseCityInput(raw) {
-  return [...new Set(
-    raw
-      .split(',')
-      .map(s => s.trim().replace(/\s+/g, ' ').toLowerCase())
-      .filter(s => s.length > 0)
-  )];
+function storageSave(key, value) {
+  try { localStorage.setItem(key, JSON.stringify(value)); } catch (e) { }
 }
-
-let badgeEl    = null;
-let startBtnEl = null;
+function storageLoad(key, cb) {
+  try { const v = localStorage.getItem(key); cb(v !== null ? JSON.parse(v) : null); }
+  catch (e) { cb(null); }
+}
 
 // ── Stopwatch ─────────────────────────────────────────────────────────────────
-let _swInterval = null;
-let _swSeconds  = 0;
-
+let _swInterval = null, _swSeconds = 0;
 function _swFmt(s) {
-  const m   = Math.floor(s / 60).toString().padStart(2, '0');
-  const sec = (s % 60).toString().padStart(2, '0');
-  return `${m}:${sec}`;
+  return `${Math.floor(s / 60).toString().padStart(2, '0')}:${(s % 60).toString().padStart(2, '0')}`;
 }
-
 function startStopwatch() {
-  stopStopwatch(true);
-  _swSeconds = 0;
+  stopStopwatch(true); _swSeconds = 0;
   const el = document.getElementById('js-stopwatch');
   if (el) { el.textContent = '00:00'; el.style.display = 'inline'; }
   _swInterval = setInterval(() => {
@@ -52,411 +69,433 @@ function startStopwatch() {
     if (el) el.textContent = _swFmt(_swSeconds);
   }, 1000);
 }
-
 function stopStopwatch(reset = false) {
-  clearInterval(_swInterval);
-  _swInterval = null;
-  if (reset) {
-    _swSeconds = 0;
-    const el = document.getElementById('js-stopwatch');
-    if (el) { el.textContent = '00:00'; el.style.display = 'none'; }
-  }
+  clearInterval(_swInterval); _swInterval = null;
+  if (reset) { _swSeconds = 0; const el = document.getElementById('js-stopwatch'); if (el) { el.textContent = '00:00'; el.style.display = 'none'; } }
 }
 
-// ── Badge ─────────────────────────────────────────────────────────────────────
+let badgeEl = null, startBtnEl = null;
+
 function injectBadge() {
   if (badgeEl) return;
 
   const style = document.createElement('style');
   style.textContent = `
-#js-badge-wrap {
-  position: fixed;
-  top: 14px;
-  right: 14px;
-  z-index: 2147483647;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 8px;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  user-select: none;
+#ap-wrap {
+  position:fixed; top:14px; right:14px; z-index:2147483647;
+  display:flex; flex-direction:column; align-items:flex-end; gap:6px;
+  font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; user-select:none;
+}
+#ap-pill {
+  display:flex; align-items:flex-start;
+  background:linear-gradient(135deg,rgba(255,255,255,0.6),rgba(255,255,255,0.4));
+  backdrop-filter:blur(18px) saturate(160%); -webkit-backdrop-filter:blur(18px) saturate(160%);
+  border-radius:18px; padding:12px 10px 12px 14px; gap:10px; width:310px;
+  border:1px solid rgba(255,255,255,0.4);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,0.7),0 6px 25px rgba(0,0,0,0.3);
+  cursor:grab;
+}
+#ap-pill:active{cursor:grabbing;}
+#ap-dot{width:8px;height:8px;border-radius:50%;background:#9e9e9e;flex-shrink:0;margin-top:5px;transition:background 0.3s;}
+#ap-dot.pulse{animation:apDotPulse 1s ease-in-out infinite;}
+@keyframes apDotPulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:0.3;transform:scale(0.7)}}
+#ap-body{display:flex;flex-direction:column;flex:1;min-width:0;gap:6px;}
+#ap-label{color:rgb(30,30,30);font-size:11.5px;font-weight:700;letter-spacing:0.04em;text-transform:uppercase;line-height:1.3;}
+#ap-stopwatch{color:rgb(80,80,80);font-size:10px;font-weight:600;font-variant-numeric:tabular-nums;display:none;}
+
+/* mode row */
+#ap-mode-row{display:flex;align-items:center;gap:6px;}
+#ap-mode-toggle{position:relative;width:36px;height:17px;flex-shrink:0;}
+#ap-mode-toggle input{opacity:0;width:0;height:0;}
+#ap-mode-slider{position:absolute;inset:0;border-radius:17px;background:#bdbdbd;transition:background 0.25s;cursor:pointer;}
+#ap-mode-slider::before{content:'';position:absolute;width:13px;height:13px;border-radius:50%;background:#fff;left:2px;top:2px;transition:transform 0.25s;box-shadow:0 1px 3px rgba(0,0,0,0.25);}
+#ap-mode-cb:checked+#ap-mode-slider{background:#00c853;}
+#ap-mode-cb:checked+#ap-mode-slider::before{transform:translateX(19px);}
+#ap-mode-lbl{color:rgb(60,60,60);font-size:10px;font-weight:700;letter-spacing:0.05em;text-transform:uppercase;}
+
+/* selected chips row */
+#ap-chips-row{display:flex;flex-wrap:wrap;gap:3px;min-height:14px;}
+#ap-chips-row:empty::before{content:'All cities';color:rgb(170,170,170);font-size:9.5px;font-style:italic;line-height:1.6;}
+.ap-chip{
+  display:inline-flex;align-items:center;gap:2px;
+  background:rgba(0,180,70,0.12);border:1px solid rgba(0,180,70,0.35);
+  border-radius:20px;padding:1px 7px 1px 8px;
+  font-size:9.5px;font-weight:600;color:rgb(0,110,45);white-space:nowrap;
+}
+.ap-chip-x{cursor:pointer;font-size:11px;opacity:0.5;margin-left:1px;}
+.ap-chip-x:hover{opacity:1;}
+
+/* city selector toggle btn */
+#ap-city-toggle-btn{
+  background:rgba(0,0,0,0.06);border:1px solid rgba(0,0,0,0.12);
+  border-radius:8px;padding:3px 9px;font-size:10px;font-weight:600;
+  color:rgb(60,60,60);cursor:pointer;align-self:flex-start;
+}
+#ap-city-toggle-btn:hover{background:rgba(0,0,0,0.1);}
+
+/* city panel */
+#ap-city-panel{
+  display:none;flex-direction:column;gap:0;
+  background:white;border:1px solid rgba(0,0,0,0.12);
+  border-radius:12px;overflow:hidden;
+  box-shadow:0 4px 20px rgba(0,0,0,0.15);
+  width:310px;max-height:320px;overflow-y:auto;
+}
+#ap-city-panel.open{display:flex;}
+#ap-city-search{
+  position:sticky;top:0;z-index:1;
+  padding:8px 10px;border-bottom:1px solid rgba(0,0,0,0.08);background:white;
+}
+#ap-city-search input{
+  width:100%;box-sizing:border-box;
+  border:1px solid rgba(0,0,0,0.15);border-radius:8px;
+  padding:5px 10px;font-size:11px;font-family:inherit;outline:none;
+  caret-color:#00c853;
+}
+.ap-province-label{
+  padding:5px 10px 3px;font-size:9px;font-weight:800;letter-spacing:0.08em;
+  text-transform:uppercase;color:rgb(140,140,140);background:rgb(248,248,248);
+  border-bottom:1px solid rgba(0,0,0,0.05);
+}
+.ap-city-item{
+  padding:7px 12px;font-size:11px;color:rgb(40,40,40);cursor:pointer;
+  display:flex;align-items:center;justify-content:space-between;
+  border-bottom:1px solid rgba(0,0,0,0.04);transition:background 0.1s;
+}
+.ap-city-item:hover{background:rgba(0,200,83,0.07);}
+.ap-city-item.selected{color:rgb(0,130,50);font-weight:600;}
+.ap-city-item.selected::after{content:'✓';font-size:11px;color:#00c853;}
+.ap-city-item.hidden{display:none;}
+
+/* job id row */
+#ap-jobid-row{display:none;align-items:center;gap:4px;}
+#ap-jobid-prefix{color:rgb(80,80,80);font-size:10px;font-weight:600;white-space:nowrap;}
+#ap-jobid-input{
+  background:rgba(255,255,255,0.6);border:1px solid rgba(0,0,0,0.15);
+  border-radius:8px;outline:none;padding:3px 8px;
+  font-size:10.5px;font-family:inherit;color:rgb(40,40,40);width:65px;
 }
 
-/* Glass pill */
-#js-main-pill {
-  display: flex;
-  align-items: center;
-  background: linear-gradient(135deg, rgba(255,255,255,0.55), rgba(255,255,255,0.35));
-  backdrop-filter: blur(18px) saturate(160%);
-  -webkit-backdrop-filter: blur(18px) saturate(160%);
-  border-radius: 60px;
-  padding: 10px 10px 10px 16px;
-  gap: 12px;
-  min-width: 300px;
-  border: 1px solid rgba(255,255,255,0.35);
-  box-shadow: inset 0 1px 0 rgba(255,255,255,0.65), 0 6px 25px rgba(0,0,0,0.35);
-  cursor: grab;
+/* custom city input */
+#ap-custom-row{display:flex;gap:4px;margin-top:6px;}
+#ap-custom-input{
+  flex:1;border:1px solid rgba(0,0,0,0.15);border-radius:8px;
+  padding:4px 8px;font-size:10.5px;font-family:inherit;outline:none;
+  caret-color:#00c853;
 }
-#js-main-pill:active { cursor: grabbing; }
+#ap-custom-add{
+  background:rgba(0,200,83,0.15);border:1px solid rgba(0,200,83,0.4);
+  border-radius:8px;padding:4px 8px;font-size:10px;font-weight:700;
+  color:rgb(0,110,45);cursor:pointer;white-space:nowrap;
+}
+#ap-custom-add:hover{background:rgba(0,200,83,0.3);}
 
-/* Dot */
-#js-dot {
-  width: 9px;
-  height: 9px;
-  border-radius: 50%;
-  background: #9e9e9e;
-  flex-shrink: 0;
-  transition: background 0.3s;
+/* orb & replay */
+#ap-orb{
+  width:40px;height:40px;border-radius:50%;flex-shrink:0;margin-top:2px;
+  background:linear-gradient(135deg,#00e676,#00c853);border:none;
+  display:flex;align-items:center;justify-content:center;pointer-events:none;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,0.4),0 3px 10px rgba(0,200,83,0.4);
+  transition:background 0.3s,box-shadow 0.3s;
 }
-#js-dot.pulse { animation: jsDotPulse 1s ease-in-out infinite; }
-@keyframes jsDotPulse {
-  0%,100% { opacity:1; transform:scale(1); }
-  50%      { opacity:0.3; transform:scale(0.7); }
+#ap-orb .ap-orb-dot{width:12px;height:12px;border-radius:50%;background:rgba(255,255,255,0.9);animation:apOrb 1.2s ease-in-out infinite;}
+@keyframes apOrb{0%,100%{transform:scale(1);opacity:0.9}50%{transform:scale(0.6);opacity:0.4}}
+#ap-replay{
+  width:40px;height:40px;border-radius:50%;flex-shrink:0;margin-top:2px;
+  background:linear-gradient(135deg,#26c6da,#00acc1);border:none;cursor:pointer;
+  display:none;align-items:center;justify-content:center;font-size:19px;color:#fff;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,0.4),0 3px 10px rgba(0,172,193,0.4);
 }
-
-/* Text area */
-#js-text-area {
-  display: flex;
-  flex-direction: column;
-  flex: 1;
-  min-width: 0;
-}
-#js-label {
-  color: rgb(40,40,40);
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  line-height: 1.3;
-}
-#js-stopwatch {
-  color: rgb(80,80,80);
-  font-size: 10.5px;
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-  letter-spacing: 0.05em;
-  margin-top: 1px;
-  display: none;
-}
-
-/* Mode toggle row */
-#js-mode-row {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin-top: 4px;
-}
-#js-mode-toggle {
-  position: relative;
-  width: 38px;
-  height: 18px;
-  flex-shrink: 0;
-}
-#js-mode-toggle input { opacity:0; width:0; height:0; }
-#js-mode-slider {
-  position: absolute;
-  inset: 0;
-  border-radius: 18px;
-  background: #9e9e9e;
-  transition: background 0.25s;
-  cursor: pointer;
-}
-#js-mode-slider::before {
-  content: '';
-  position: absolute;
-  width: 14px;
-  height: 14px;
-  border-radius: 50%;
-  background: #fff;
-  left: 2px;
-  top: 2px;
-  transition: transform 0.25s;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.3);
-}
-#js-mode-checkbox:checked + #js-mode-slider { background: #00c853; }
-#js-mode-checkbox:checked + #js-mode-slider::before { transform: translateX(20px); }
-#js-mode-label {
-  color: rgb(60,60,60);
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-  white-space: nowrap;
-}
-
-/* Input row (city or job id) */
-#js-input-row {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  margin-top: 3px;
-}
-#js-input-prefix-label {
-  color: rgb(80,80,80);
-  font-size: 10.5px;
-  font-weight: 600;
-  white-space: nowrap;
-}
-#js-input-prefix-static {
-  color: rgb(80,80,80);
-  font-size: 10.5px;
-  font-weight: 600;
-  white-space: nowrap;
-  display: none;
-}
-#js-main-input {
-  background: transparent;
-  border: none;
-  outline: none;
-  color: rgb(60,60,60);
-  font-size: 10.5px;
-  font-family: inherit;
-  font-weight: 400;
-  width: 130px;
-  caret-color: #00c853;
-  padding: 0;
-  cursor: text;
-}
-#js-main-input::placeholder { color: rgb(140,140,140); }
-
-/* Status indicator (replaces start/stop button) */
-#js-status-orb {
-  width: 46px;
-  height: 46px;
-  border-radius: 50%;
-  flex-shrink: 0;
-  background: linear-gradient(135deg, #00e676, #00c853);
-  border: none;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  box-shadow: inset 0 1px 0 rgba(255,255,255,0.4), 0 3px 10px rgba(0,200,83,0.45);
-  transition: background 0.3s, box-shadow 0.3s;
-  /* Not a button — purely decorative status indicator */
-  pointer-events: none;
-}
-#js-status-orb .js-orb-icon {
-  width: 14px;
-  height: 14px;
-  border-radius: 50%;
-  background: rgba(255,255,255,0.9);
-  animation: orbPulse 1.2s ease-in-out infinite;
-}
-@keyframes orbPulse {
-  0%,100% { transform: scale(1);   opacity: 0.9; }
-  50%      { transform: scale(0.6); opacity: 0.4; }
-}
-#js-status-orb.orb-idle {
-  background: linear-gradient(135deg, #bdbdbd, #9e9e9e);
-  box-shadow: inset 0 1px 0 rgba(255,255,255,0.4), 0 3px 10px rgba(0,0,0,0.2);
-}
-#js-status-orb.orb-idle .js-orb-icon { animation: none; opacity: 0.5; }
-
-/* Replay button — shown only after APPLIED, so client can start a new scan */
-#js-start-btn {
-  width: 46px;
-  height: 46px;
-  border-radius: 50%;
-  flex-shrink: 0;
-  background: linear-gradient(135deg,#26c6da,#00acc1);
-  border: none;
-  cursor: pointer;
-  display: none;
-  align-items: center;
-  justify-content: center;
-  transition: transform 0.12s, filter 0.12s;
-  box-shadow: inset 0 1px 0 rgba(255,255,255,0.4), 0 3px 10px rgba(0,172,193,0.45);
-  font-size: 20px;
-  color: #fff;
-  line-height: 1;
-}
-#js-start-btn:hover  { filter: brightness(1.1); }
-#js-start-btn:active { transform: scale(0.93); }
+#ap-replay:hover{filter:brightness(1.1);}
 `;
   document.head.appendChild(style);
 
-  const wrap = document.createElement('div');
-  wrap.id = 'js-badge-wrap';
-
-  const mainPill = document.createElement('div');
-  mainPill.id = 'js-main-pill';
-
-  const dot = document.createElement('span');
-  dot.id = 'js-dot';
-
   const _isCA = window.location.hostname.includes('.ca');
-  const _jobPrefix = _isCA ? 'JOB-CA-00000' : 'JOB-US-00000';
+  const _pfx = _isCA ? 'JOB-CA-00000' : 'JOB-US-00000';
 
-  const textArea = document.createElement('div');
-  textArea.id = 'js-text-area';
-  textArea.innerHTML = `
-    <span id="js-label">Starting\u2026</span>
-    <span id="js-stopwatch">00:00</span>
-    <div id="js-mode-row">
-      <label id="js-mode-toggle">
-        <input type="checkbox" id="js-mode-checkbox" />
-        <span id="js-mode-slider"></span>
-      </label>
-      <span id="js-mode-label">Poll Jobs</span>
+  // ── Build DOM ─────────────────────────────────────────────────────────────────
+  const wrap = document.createElement('div'); wrap.id = 'ap-wrap';
+
+  // Main pill
+  const pill = document.createElement('div'); pill.id = 'ap-pill';
+  pill.innerHTML = `
+    <span id="ap-dot"></span>
+    <div id="ap-body">
+      <span id="ap-label">Starting\u2026</span>
+      <span id="ap-stopwatch">00:00</span>
+      <div id="ap-mode-row">
+        <label id="ap-mode-toggle"><input type="checkbox" id="ap-mode-cb"/><span id="ap-mode-slider"></span></label>
+        <span id="ap-mode-lbl">Poll Jobs</span>
+      </div>
+      <div id="ap-chips-row"></div>
+      <button id="ap-city-toggle-btn">\u271a Cities</button>
+      <div id="ap-jobid-row">
+        <span id="ap-jobid-prefix">${_pfx}</span>
+        <input id="ap-jobid-input" type="text" placeholder="12345"/>
+      </div>
     </div>
-    <div id="js-input-row">
-      <span id="js-input-prefix-label">City :</span>
-      <span id="js-input-prefix-static">${_jobPrefix}</span>
-      <input id="js-main-input" type="text" placeholder="Enter city (optional)" spellcheck="false" autocomplete="off" />
-    </div>
+    <div id="ap-orb"><span class="ap-orb-dot"></span></div>
+    <button id="ap-replay">\u27F3</button>
   `;
 
-  // Status orb (not clickable while running)
-  const orbEl = document.createElement('div');
-  orbEl.id = 'js-status-orb';
-  orbEl.innerHTML = `<span class="js-orb-icon"></span>`;
+  // City panel (separate element, below pill)
+  const panel = document.createElement('div'); panel.id = 'ap-city-panel';
+  panel.innerHTML = `
+    <div id="ap-city-search">
+      <input id="ap-city-search-input" type="text" placeholder="Search city…" autocomplete="off" spellcheck="false"/>
+      <div id="ap-custom-row">
+        <input id="ap-custom-input" type="text" placeholder="Type custom city…" autocomplete="off" spellcheck="false"/>
+        <button id="ap-custom-add">+ Add</button>
+      </div>
+    </div>
+    <div id="ap-city-list"></div>
+  `;
 
-  // Replay button (only shown after APPLIED)
-  startBtnEl = document.createElement('button');
-  startBtnEl.id = 'js-start-btn';
-  startBtnEl.textContent = '\u27F3';
-  startBtnEl.title = 'Scan again';
+  wrap.appendChild(pill);
+  wrap.appendChild(panel);
+  document.body.appendChild(wrap);
+  badgeEl = pill;
+  startBtnEl = document.getElementById('ap-replay');
   startBtnEl.addEventListener('click', () => {
     if (typeof window.JS_TOGGLE_SCAN === 'function') window.JS_TOGGLE_SCAN();
   });
 
-  mainPill.appendChild(dot);
-  mainPill.appendChild(textArea);
-  mainPill.appendChild(orbEl);
-  mainPill.appendChild(startBtnEl);
-  wrap.appendChild(mainPill);
-  document.body.appendChild(wrap);
+  // ── City selector ─────────────────────────────────────────────────────────────
+  let _selected = [];
+  const chipsRow = document.getElementById('ap-chips-row');
+  const cityList = document.getElementById('ap-city-list');
+  const searchInput = document.getElementById('ap-city-search-input');
+  const toggleBtn = document.getElementById('ap-city-toggle-btn');
 
-  // ── Mode toggle handler ──────────────────────────────────────────────────────
-  const modeCheckbox   = document.getElementById('js-mode-checkbox');
-  const modeLabelEl    = document.getElementById('js-mode-label');
-  const prefixLabelEl  = document.getElementById('js-input-prefix-label');
-  const prefixStaticEl = document.getElementById('js-input-prefix-static');
-  const mainInputEl    = document.getElementById('js-main-input');
-
-  function applyMode(isScheduleMode) {
-    window.JS_MODE = isScheduleMode ? 'schedules' : 'jobs';
-    if (isScheduleMode) {
-      modeLabelEl.textContent       = 'Poll Schedules';
-      prefixLabelEl.textContent     = 'Job ID :';
-      prefixStaticEl.style.display  = 'inline';
-      mainInputEl.placeholder       = '12345';
-      mainInputEl.style.width       = '55px';
-      mainInputEl.value             = '';
-      window.JS_JOB_ID              = '';
-      window.JS_CITY_FILTER         = '';
-      window.JS_CITY_FILTERS        = [];
-    } else {
-      modeLabelEl.textContent       = 'Poll Jobs';
-      prefixLabelEl.textContent     = 'City :';
-      prefixStaticEl.style.display  = 'none';
-      mainInputEl.placeholder       = 'e.g. toronto, ottawa';
-      mainInputEl.style.width       = '130px';
-      mainInputEl.value             = '';
-      window.JS_CITY_FILTER         = '';
-      window.JS_CITY_FILTERS        = [];
-      window.JS_JOB_ID              = '';
-    }
+  function syncGlobals() {
+    window.JS_CITY_FILTERS = [..._selected];
+    window.JS_CITY_FILTER = _selected[0] || '';
+    storageSave(STORAGE_KEY_CITIES, _selected);
   }
 
-  modeCheckbox.addEventListener('change', () => {
-    applyMode(modeCheckbox.checked);
+  function renderChips() {
+    chipsRow.innerHTML = '';
+    _selected.forEach(city => {
+      const chip = document.createElement('span');
+      chip.className = 'ap-chip';
+      chip.innerHTML = `${city}<span class="ap-chip-x" data-city="${city}">\u00d7</span>`;
+      chip.querySelector('.ap-chip-x').addEventListener('click', (e) => {
+        e.stopPropagation();
+        _selected = _selected.filter(c => c !== city);
+        renderChips(); updateCityList(); syncGlobals();
+      });
+      chipsRow.appendChild(chip);
+    });
+  }
+
+  function buildCityList() {
+    cityList.innerHTML = '';
+    Object.entries(PROVINCE_GROUPS).forEach(([province, cities]) => {
+      const lbl = document.createElement('div');
+      lbl.className = 'ap-province-label'; lbl.textContent = province;
+      cityList.appendChild(lbl);
+      cities.forEach(city => {
+        const item = document.createElement('div');
+        item.className = 'ap-city-item';
+        item.textContent = city;
+        item.dataset.city = city;
+        if (_selected.includes(city)) item.classList.add('selected');
+        item.addEventListener('click', () => {
+          if (_selected.includes(city)) {
+            _selected = _selected.filter(c => c !== city);
+            item.classList.remove('selected');
+          } else {
+            _selected.push(city);
+            item.classList.add('selected');
+          }
+          renderChips(); syncGlobals();
+        });
+        cityList.appendChild(item);
+      });
+    });
+  }
+
+  function updateCityList() {
+    cityList.querySelectorAll('.ap-city-item').forEach(item => {
+      item.classList.toggle('selected', _selected.includes(item.dataset.city));
+    });
+  }
+
+  function filterCityList(q) {
+    const query = q.toLowerCase();
+    let lastProvince = null;
+    cityList.childNodes.forEach(node => {
+      if (node.classList?.contains('ap-province-label')) {
+        lastProvince = node; return;
+      }
+      if (node.classList?.contains('ap-city-item')) {
+        const match = !query || node.dataset.city.toLowerCase().includes(query);
+        node.classList.toggle('hidden', !match);
+      }
+    });
+    // hide province labels with no visible children
+    cityList.querySelectorAll('.ap-province-label').forEach(lbl => {
+      let sib = lbl.nextSibling; let anyVisible = false;
+      while (sib && !sib.classList?.contains('ap-province-label')) {
+        if (!sib.classList?.contains('hidden')) anyVisible = true;
+        sib = sib.nextSibling;
+      }
+      lbl.style.display = anyVisible ? '' : 'none';
+    });
+  }
+
+  toggleBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    panel.classList.toggle('open');
+    if (panel.classList.contains('open')) searchInput.focus();
+  });
+
+  searchInput.addEventListener('input', () => filterCityList(searchInput.value));
+
+  document.addEventListener('click', (e) => {
+    if (!panel.contains(e.target) && e.target !== toggleBtn) {
+      panel.classList.remove('open');
+    }
+  });
+
+  // Custom city add
+  const customInput = document.getElementById('ap-custom-input');
+  const customAdd = document.getElementById('ap-custom-add');
+  function addCustomCity() {
+    const city = customInput.value.trim();
+    if (!city || _selected.includes(city)) { customInput.value = ''; return; }
+    _selected.push(city);
+    // add to list UI dynamically
+    const item = document.createElement('div');
+    item.className = 'ap-city-item selected';
+    item.textContent = city;
+    item.dataset.city = city;
+    item.addEventListener('click', () => {
+      if (_selected.includes(city)) {
+        _selected = _selected.filter(c => c !== city);
+        item.classList.remove('selected');
+      } else {
+        _selected.push(city);
+        item.classList.add('selected');
+      }
+      renderChips(); syncGlobals();
+    });
+    // insert under a "Custom" label (create once)
+    let customGroup = document.getElementById('ap-custom-group');
+    if (!customGroup) {
+      customGroup = document.createElement('div');
+      customGroup.id = 'ap-custom-group';
+      const lbl = document.createElement('div');
+      lbl.className = 'ap-province-label'; lbl.textContent = 'Custom';
+      customGroup.appendChild(lbl);
+      cityList.appendChild(customGroup);
+    }
+    customGroup.appendChild(item);
+    renderChips(); syncGlobals();
+    customInput.value = '';
+  }
+  customAdd.addEventListener('click', addCustomCity);
+  customInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); addCustomCity(); } });
+
+  // Load saved cities, then build list
+  storageLoad(STORAGE_KEY_CITIES, (saved) => {
+    _selected = Array.isArray(saved) ? saved : [];
+    buildCityList();
+    renderChips();
+    syncGlobals();
+  });
+
+  // ── Job ID ────────────────────────────────────────────────────────────────────
+  const jobidRow = document.getElementById('ap-jobid-row');
+  const jobidInput = document.getElementById('ap-jobid-input');
+  jobidInput.addEventListener('input', () => {
+    const d = jobidInput.value.replace(/\D/g, '');
+    jobidInput.value = d;
+    window.JS_JOB_ID = d ? _pfx + d : '';
+    storageSave(STORAGE_KEY_JOBID, d);
+  });
+  storageLoad(STORAGE_KEY_JOBID, (saved) => {
+    if (saved) { jobidInput.value = saved; window.JS_JOB_ID = _pfx + saved; }
+  });
+
+  // ── Mode toggle ───────────────────────────────────────────────────────────────
+  const modeCb = document.getElementById('ap-mode-cb');
+  const modeLbl = document.getElementById('ap-mode-lbl');
+  const citySection = [chipsRow, toggleBtn];
+
+  function applyMode(isSchedule) {
+    window.JS_MODE = isSchedule ? 'schedules' : 'jobs';
+    modeLbl.textContent = isSchedule ? 'Poll Schedules' : 'Poll Jobs';
+    citySection.forEach(el => el.style.display = isSchedule ? 'none' : '');
+    jobidRow.style.display = isSchedule ? 'flex' : 'none';
+    if (!isSchedule) panel.classList.remove('open');
+    storageSave(STORAGE_KEY_MODE, window.JS_MODE);
+  }
+
+  modeCb.addEventListener('change', () => {
+    applyMode(modeCb.checked);
     if (typeof window.JS_ON_MODE_CHANGE === 'function') window.JS_ON_MODE_CHANGE();
   });
 
-  mainInputEl.addEventListener('input', (e) => {
-    if (window.JS_MODE === 'schedules') {
-      const digits = e.target.value.replace(/\D/g, '');
-      e.target.value   = digits;
-      window.JS_JOB_ID = digits ? _jobPrefix + digits : '';
-    } else {
-      const parsed = parseCityInput(e.target.value);
-      window.JS_CITY_FILTERS = parsed;
-      window.JS_CITY_FILTER  = parsed[0] || '';
-    }
+  storageLoad(STORAGE_KEY_MODE, (saved) => {
+    const isSched = saved === 'schedules';
+    modeCb.checked = isSched; applyMode(isSched);
   });
 
   // ── Drag ──────────────────────────────────────────────────────────────────────
   let dragging = false, dragOffX = 0, dragOffY = 0;
-  mainPill.addEventListener('mousedown', (e) => {
-    if (e.target.closest('input, button, label')) return;
+  pill.addEventListener('mousedown', (e) => {
+    if (e.target.closest('input,button,label,.ap-chip-x')) return;
     dragging = true;
     const rect = wrap.getBoundingClientRect();
-    dragOffX = e.clientX - rect.left;
-    dragOffY = e.clientY - rect.top;
-    wrap.style.right  = 'auto';
-    wrap.style.bottom = 'auto';
-    wrap.style.left   = rect.left + 'px';
-    wrap.style.top    = rect.top  + 'px';
+    dragOffX = e.clientX - rect.left; dragOffY = e.clientY - rect.top;
+    wrap.style.right = 'auto'; wrap.style.bottom = 'auto';
+    wrap.style.left = rect.left + 'px'; wrap.style.top = rect.top + 'px';
     e.preventDefault();
   });
   document.addEventListener('mousemove', (e) => {
     if (!dragging) return;
-    wrap.style.left = (e.clientX - dragOffX) + 'px';
-    wrap.style.top  = (e.clientY - dragOffY)  + 'px';
+    wrap.style.left = (e.clientX - dragOffX) + 'px'; wrap.style.top = (e.clientY - dragOffY) + 'px';
   });
   document.addEventListener('mouseup', () => { dragging = false; });
 
-  badgeEl = mainPill;
   setStatus('IDLE');
 }
 
 // ── setStatus ─────────────────────────────────────────────────────────────────
 function setStatus(key) {
-  const cfg   = STATUS[key] || STATUS.IDLE;
-  const dot   = document.getElementById('js-dot');
-  const label = document.getElementById('js-label');
-  const orb   = document.getElementById('js-status-orb');
-  if (!dot || !label) return;
-
+  const cfg = STATUS[key] || STATUS.IDLE;
+  const dot = document.getElementById('ap-dot');
+  const lbl = document.getElementById('ap-label');
+  const orb = document.getElementById('ap-orb');
+  if (!dot || !lbl) return;
   dot.style.background = cfg.color;
-  dot.className        = cfg.pulse ? 'pulse' : '';
-  label.textContent    = cfg.label;
-
-  // Update orb color to match status
+  dot.className = cfg.pulse ? 'pulse' : '';
+  lbl.textContent = cfg.label;
   if (orb) {
-    orb.style.background = `linear-gradient(135deg, ${cfg.color}cc, ${cfg.color})`;
-    orb.style.boxShadow  = `inset 0 1px 0 rgba(255,255,255,0.4), 0 3px 10px ${cfg.color}66`;
-    const orbIcon = orb.querySelector('.js-orb-icon');
-    if (orbIcon) orbIcon.style.animationPlayState = cfg.pulse ? 'running' : 'paused';
+    orb.style.background = `linear-gradient(135deg,${cfg.color}cc,${cfg.color})`;
+    orb.style.boxShadow = `inset 0 1px 0 rgba(255,255,255,0.4),0 3px 10px ${cfg.color}55`;
+    const d = orb.querySelector('.ap-orb-dot');
+    if (d) d.style.animationPlayState = cfg.pulse ? 'running' : 'paused';
   }
-
-  // Stopwatch
-  if (key === 'SCANNING' || key === 'POLLING') {
-    startStopwatch();
-  } else if (['IDLE', 'NO_JOB_ID'].includes(key)) {
-    stopStopwatch(true);
-  } else if (['APPLIED','APPLYING','QUESTIONS','SCHEDULING','STOPPED'].includes(key)) {
-    stopStopwatch(false);
-  }
-
-  // Alert beep on QUESTIONS
-  if (key === 'QUESTIONS' && !setStatus._questionsSoundPlayed) {
-    setStatus._questionsSoundPlayed = true;
+  if (key === 'SCANNING' || key === 'POLLING') startStopwatch();
+  else if (['IDLE', 'NO_JOB_ID'].includes(key)) stopStopwatch(true);
+  else stopStopwatch(false);
+  if (key === 'QUESTIONS' && !setStatus._beeped) {
+    setStatus._beeped = true;
     try {
-      const ctx    = new (window.AudioContext || window.webkitAudioContext)();
-      const master = ctx.createGain();
-      master.gain.setValueAtTime(0.9, ctx.currentTime);
-      master.connect(ctx.destination);
-      [[880, 0], [880, 0.18]].forEach(([freq, delay]) => {
-        const osc  = ctx.createOscillator();
-        const gain = ctx.createGain();
-        osc.connect(gain); gain.connect(master);
-        osc.type = 'square';
-        osc.frequency.setValueAtTime(freq, ctx.currentTime + delay);
-        gain.gain.setValueAtTime(0, ctx.currentTime + delay);
-        gain.gain.linearRampToValueAtTime(0.25, ctx.currentTime + delay + 0.02);
-        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + delay + 0.14);
-        osc.start(ctx.currentTime + delay);
-        osc.stop(ctx.currentTime  + delay + 0.18);
+      const ctx = new (window.AudioContext || window.webkitAudioContext)();
+      [[880, 0], [880, 0.18]].forEach(([f, d]) => {
+        const o = ctx.createOscillator(), g = ctx.createGain();
+        o.connect(g); g.connect(ctx.destination); o.type = 'square';
+        o.frequency.setValueAtTime(f, ctx.currentTime + d);
+        g.gain.setValueAtTime(0, ctx.currentTime + d);
+        g.gain.linearRampToValueAtTime(0.25, ctx.currentTime + d + 0.02);
+        g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + d + 0.14);
+        o.start(ctx.currentTime + d); o.stop(ctx.currentTime + d + 0.18);
       });
-    } catch (e) { /* ignore */ }
+    } catch (e) { }
   }
-
-  // Show replay button only after APPLIED — hide orb
   if (key === 'APPLIED') {
     if (orb) orb.style.display = 'none';
     if (startBtnEl) startBtnEl.style.display = 'flex';
@@ -466,18 +505,13 @@ function setStatus(key) {
   }
 }
 
-// setScanButtonState is a no-op now — orb handles visual state via setStatus
-function setScanButtonState(_running) { /* intentionally empty */ }
+function setScanButtonState(_) { }
 
 function resetForRescan() {
   sessionStorage.removeItem('js_applied');
-  stopStopwatch(true);
-  setStatus._questionsSoundPlayed = false;
+  stopStopwatch(true); setStatus._beeped = false;
   const isCA = window.location.hostname.includes('.ca');
-  window.location.href = isCA
-    ? 'https://hiring.amazon.ca/'
-    : 'https://hiring.amazon.com/';
+  window.location.href = isCA ? 'https://hiring.amazon.ca/' : 'https://hiring.amazon.com/';
 }
 
-window.JS_IS_APPLIED = () =>
-  startBtnEl && startBtnEl.style.display === 'flex';
+window.JS_IS_APPLIED = () => startBtnEl && startBtnEl.style.display === 'flex';

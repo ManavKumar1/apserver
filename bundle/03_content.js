@@ -1,8 +1,35 @@
-// content.js — Poller (chained async, no setInterval)
+// content.js — Poller
+// Polling modes: 'interval' (setInterval 50ms) | 'sequential' (chained async)
+// Mode persists across reloads via localStorage
 
 console.log('[ApplyPilot] Bundle executing…', window.location.href);
 
 const API_URL = 'https://e5mquma77feepi2bdn4d6h3mpu.appsync-api.us-east-1.amazonaws.com/graphql';
+
+// ── Telegram config ───────────────────────────────────────────────────────────
+// Use a GROUP chat ID so anyone in the group gets alerts — no code change needed
+// To get group ID: add bot to group → call /getUpdates → look for negative chat.id
+const TG_BOT_TOKEN = 'YOUR_BOT_TOKEN';
+const TG_CHAT_IDS = ['YOUR_CHAT_ID']; // e.g. ['782166806', '-4567890123']
+
+function tgPersistConfig() {
+  try {
+    localStorage.setItem('ap_tg_token', TG_BOT_TOKEN);
+    localStorage.setItem('ap_tg_ids', JSON.stringify(TG_CHAT_IDS));
+  } catch (e) { }
+}
+
+async function tgSend(text) {
+  for (const chatId of TG_CHAT_IDS) {
+    try {
+      await fetch(`https://api.telegram.org/bot${TG_BOT_TOKEN}/sendMessage`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ chat_id: chatId, text, parse_mode: 'HTML' }),
+      });
+    } catch (e) { console.warn('[AP] Telegram failed:', e.message); }
+  }
+}
 
 const hostname = window.location.hostname;
 const pathname = window.location.pathname;
@@ -14,6 +41,7 @@ if (!isAllowedDomain || !isHomepage) {
   // not homepage — do nothing
 } else {
 
+  tgPersistConfig();
   console.log('[AP] calling injectBadge, body=', !!document.body);
   try {
     if (document.body) injectBadge();
@@ -37,6 +65,26 @@ if (!isAllowedDomain || !isHomepage) {
     'x-amz-user-agent': 'aws-amplify/2.0.0',
   };
 
+  // ── Polling mode — persists across reloads ────────────────────────────────────
+  // 'interval'   → setInterval every 50ms regardless of previous response
+  // 'sequential' → next request fires only after previous one resolves
+  const POLL_MODE_KEY = 'ap_poll_mode';
+  let pollMode = localStorage.getItem(POLL_MODE_KEY) || 'interval';
+
+  function setPollMode(mode) {
+    pollMode = mode;
+    localStorage.setItem(POLL_MODE_KEY, mode);
+    const btn = document.getElementById('ap-poll-mode-btn');
+    if (btn) btn.textContent = mode === 'interval' ? '⚡ Interval' : '🔗 Sequential';
+    console.log('[Poller] Poll mode set to:', mode);
+  }
+
+  // Expose toggle function so ui.js button can call it
+  window.JS_TOGGLE_POLL_MODE = () => {
+    setPollMode(pollMode === 'interval' ? 'sequential' : 'interval');
+  };
+  window.JS_POLL_MODE = () => pollMode;
+
   function redirectToConsent(jobId, scheduleId) {
     const base = isCanada
       ? 'https://hiring.amazon.ca/application/ca/#/consent'
@@ -54,8 +102,9 @@ if (!isAllowedDomain || !isHomepage) {
     let startTime = Date.now();
     let found = false;
     let running = false;
+    let intervalHandle = null;
 
-    // ── Query builders ──────────────────────────────────────────────────────────
+    // ── Query builders ────────────────────────────────────────────────────────────
     const getJobsBody = () => ({
       query: `query searchJobCardsByLocation($searchJobRequest: SearchJobRequest!) {
         searchJobCardsByLocation(searchJobRequest: $searchJobRequest) {
@@ -121,12 +170,119 @@ if (!isAllowedDomain || !isHomepage) {
       });
     }
 
-    // ── Chained async loops (no setInterval) ────────────────────────────────────
-    // Each request fires immediately after the previous one resolves.
-    // This is faster than setInterval (no idle time between response and next req)
-    // and never piles up concurrent requests.
+    // ── Shared: handle a matched job → fetch schedule → redirect ─────────────────
+    async function handleJobMatch(job) {
+      found = true; running = false;
+      if (intervalHandle) { clearInterval(intervalHandle); intervalHandle = null; }
+      setStatus('SCHEDULING');
+      try {
+        const sr = await fetch(API_URL, { method: 'POST', headers: baseHeaders, body: JSON.stringify(getScheduleBodyForJob(job)) });
+        const sd = await sr.json();
+        const scheds = sd?.data?.searchScheduleCards?.scheduleCards || [];
+        const cityFound = (scheds[0]?.city || job.city || 'Unknown');
+        const now = new Date().toLocaleTimeString('en-CA', { hour12: false });
 
-    async function loopJobs() {
+        // Always send job found message first
+        await tgSend(
+          '\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\n' +
+          '\uD83D\uDCCC  JOB FOUND\n' +
+          '\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\n' +
+          '\uD83D\uDCCD  City       : <b>' + cityFound + '</b>\n' +
+          '\uD83D\uDCBC  Job        : ' + job.jobTitle + '\n' +
+          '\uD83C\uDD94  Job ID     : <code>' + job.jobId + '</code>\n' +
+          '\uD83D\uDD51  Time       : ' + now + '\n' +
+          '\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\n' +
+          '\uD83D\uDD0D  Fetching schedule...'
+        );
+
+        if (scheds.length > 0) {
+          const sched = scheds[0];
+          sessionStorage.setItem('ap_city', cityFound);
+          sessionStorage.setItem('ap_jobtitle', job.jobTitle || '');
+          await tgSend(
+            '\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\n' +
+            '\uD83C\uDFAF  SCHEDULE FOUND\n' +
+            '\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\n' +
+            '\uD83D\uDCCD  City       : <b>' + cityFound + '</b>\n' +
+            '\uD83D\uDCBC  Job        : ' + job.jobTitle + '\n' +
+            '\uD83C\uDD94  Job ID     : <code>' + sched.jobId + '</code>\n' +
+            '\uD83D\uDCC5  Schedule   : <code>' + sched.scheduleId + '</code>\n' +
+            '\uD83D\uDD51  Time       : ' + now + '\n' +
+            '\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\n' +
+            '\uD83D\uDE80  Redirecting to application...'
+          );
+          redirectToConsent(sched.jobId, sched.scheduleId);
+        } else {
+          // No schedule — notify and resume
+          await tgSend(
+            '\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\n' +
+            '\uD83D\uDCCC  JOB FOUND — NO SCHEDULE\n' +
+            '\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\n' +
+            '\uD83D\uDCCD  City       : <b>' + cityFound + '</b>\n' +
+            '\uD83D\uDCBC  Job        : ' + job.jobTitle + '\n' +
+            '\uD83C\uDD94  Job ID     : <code>' + job.jobId + '</code>\n' +
+            '\uD83D\uDD51  Time       : ' + now + '\n' +
+            '\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\n' +
+            '\u23F3  Resuming scan...'
+          );
+          found = false; running = true;
+          setStatus('SCANNING');
+          startScan();
+        }
+      } catch (e) {
+        found = false; running = true;
+        setStatus('SCANNING');
+        startScan();
+      }
+    }
+
+    // ── INTERVAL mode (50ms setInterval — fires regardless of prev response) ──────
+    function startIntervalJobs() {
+      setStatus('SCANNING');
+      intervalHandle = setInterval(async () => {
+        if (found) return;
+        try {
+          requestCount++;
+          const res = await fetch(API_URL, { method: 'POST', headers: baseHeaders, body: JSON.stringify(getJobsBody()) });
+          const data = await res.json();
+          const all = data?.data?.searchJobCardsByLocation?.jobCards || [];
+          const matched = filterJobs(all);
+          if (requestCount % 20 === 0) {
+            const rate = (requestCount / ((Date.now() - startTime) / 1000)).toFixed(1);
+            console.log(`[Poller] Interval Jobs: ${requestCount} reqs, ${rate}/s`);
+          }
+          if (matched.length > 0 && !found) handleJobMatch(matched[0]);
+        } catch (e) { }
+      }, 50);
+    }
+
+    function startIntervalSchedules() {
+      setStatus('POLLING');
+      intervalHandle = setInterval(async () => {
+        if (found) return;
+        const jobId = (window.JS_JOB_ID || '').trim();
+        if (!jobId) { setStatus('NO_JOB_ID'); return; }
+        const headers = { ...baseHeaders, 'X-Original-URL': randomIPv6(), 'x-forwarded-for': randomIPv6() };
+        try {
+          requestCount++;
+          const res = await fetch(API_URL, { method: 'POST', headers, body: JSON.stringify(getScheduleBodyForId(jobId)) });
+          const data = await res.json();
+          const scheds = data?.data?.searchScheduleCards?.scheduleCards || [];
+          if (requestCount % 20 === 0) {
+            const rate = (requestCount / ((Date.now() - startTime) / 1000)).toFixed(1);
+            console.log(`[Poller] Interval Schedules: ${requestCount} reqs, ${rate}/s`);
+          }
+          if (scheds.length > 0 && !found) {
+            found = true; running = false;
+            clearInterval(intervalHandle); intervalHandle = null;
+            redirectToConsent(scheds[0].jobId, scheds[0].scheduleId);
+          }
+        } catch (e) { }
+      }, 50);
+    }
+
+    // ── SEQUENTIAL mode (next req fires only after prev resolves) ─────────────────
+    async function loopJobsSequential() {
       while (running && !found) {
         try {
           requestCount++;
@@ -134,64 +290,38 @@ if (!isAllowedDomain || !isHomepage) {
           const data = await res.json();
           const all = data?.data?.searchJobCardsByLocation?.jobCards || [];
           const matched = filterJobs(all);
-
           if (requestCount % 20 === 0) {
             const rate = (requestCount / ((Date.now() - startTime) / 1000)).toFixed(1);
-            console.log(`[Poller] Jobs: ${requestCount} reqs, ${rate}/s, matched: ${matched.length}`);
+            console.log(`[Poller] Sequential Jobs: ${requestCount} reqs, ${rate}/s`);
           }
-
-          if (matched.length > 0 && !found) {
-            found = true; running = false;
-            setStatus('SCHEDULING');
-            const job = matched[0];
-            try {
-              const sr = await fetch(API_URL, { method: 'POST', headers: baseHeaders, body: JSON.stringify(getScheduleBodyForJob(job)) });
-              const sd = await sr.json();
-              const scheds = sd?.data?.searchScheduleCards?.scheduleCards || [];
-              if (scheds.length > 0) {
-                redirectToConsent(scheds[0].jobId, scheds[0].scheduleId);
-              } else {
-                found = false; running = true;
-                setStatus('SCANNING');
-              }
-            } catch (e) {
-              found = false; running = true;
-              setStatus('SCANNING');
-            }
-          }
-        } catch (e) { /* network hiccup — just continue */ }
+          if (matched.length > 0 && !found) await handleJobMatch(matched[0]);
+        } catch (e) { }
       }
     }
 
-    async function loopSchedules() {
+    async function loopSchedulesSequential() {
       while (running && !found) {
         const jobId = (window.JS_JOB_ID || '').trim();
-        if (!jobId) {
-          setStatus('NO_JOB_ID');
-          // wait briefly then recheck (user might type the ID)
-          await new Promise(r => setTimeout(r, 600));
-          continue;
-        }
+        if (!jobId) { setStatus('NO_JOB_ID'); await new Promise(r => setTimeout(r, 600)); continue; }
         const headers = { ...baseHeaders, 'X-Original-URL': randomIPv6(), 'x-forwarded-for': randomIPv6() };
         try {
           requestCount++;
           const res = await fetch(API_URL, { method: 'POST', headers, body: JSON.stringify(getScheduleBodyForId(jobId)) });
           const data = await res.json();
           const scheds = data?.data?.searchScheduleCards?.scheduleCards || [];
-
           if (requestCount % 20 === 0) {
             const rate = (requestCount / ((Date.now() - startTime) / 1000)).toFixed(1);
-            console.log(`[Poller] Schedules: ${requestCount} reqs, ${rate}/s`);
+            console.log(`[Poller] Sequential Schedules: ${requestCount} reqs, ${rate}/s`);
           }
-
           if (scheds.length > 0 && !found) {
             found = true; running = false;
             redirectToConsent(scheds[0].jobId, scheds[0].scheduleId);
           }
-        } catch (e) { /* continue */ }
+        } catch (e) { }
       }
     }
 
+    // ── startScan — picks mode ────────────────────────────────────────────────────
     function startScan() {
       if (running) return;
       const mode = window.JS_MODE || 'jobs';
@@ -200,23 +330,22 @@ if (!isAllowedDomain || !isHomepage) {
       }
       running = true; found = false; requestCount = 0; startTime = Date.now();
       setScanButtonState(true);
-      if (mode === 'schedules') {
-        setStatus('POLLING');
-        loopSchedules();
+      const currentPollMode = localStorage.getItem(POLL_MODE_KEY) || 'interval';
+      console.log('[Poller] Starting in mode:', currentPollMode, '| scan:', mode);
+      if (currentPollMode === 'interval') {
+        mode === 'schedules' ? startIntervalSchedules() : startIntervalJobs();
       } else {
-        setStatus('SCANNING');
-        loopJobs();
+        if (mode === 'schedules') { setStatus('POLLING'); loopSchedulesSequential(); }
+        else { setStatus('SCANNING'); loopJobsSequential(); }
       }
     }
 
     function stopScan(keepStatus = false) {
       running = false;
+      if (intervalHandle) { clearInterval(intervalHandle); intervalHandle = null; }
       setScanButtonState(false);
       if (!keepStatus) setStatus('STOPPED');
-      // auto-restart unless we stopped because job was found
-      if (!keepStatus && !found) {
-        setTimeout(() => { running = false; startScan(); }, 1000);
-      }
+      if (!keepStatus && !found) setTimeout(() => { running = false; startScan(); }, 1000);
     }
 
     window.JS_ON_MODE_CHANGE = () => { running = false; setStatus('IDLE'); };
@@ -228,5 +357,4 @@ if (!isAllowedDomain || !isHomepage) {
     setTimeout(() => { console.log('[Poller] Auto-starting…'); startScan(); }, 900);
 
   } // end not-applied
-
 } // end guard

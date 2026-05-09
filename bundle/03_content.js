@@ -7,10 +7,9 @@ console.log('[ApplyPilot] Bundle executing…', window.location.href);
 const API_URL = 'https://e5mquma77feepi2bdn4d6h3mpu.appsync-api.us-east-1.amazonaws.com/graphql';
 
 // ── Telegram config ───────────────────────────────────────────────────────────
-// Use a GROUP chat ID so anyone in the group gets alerts — no code change needed
-// To get group ID: add bot to group → call /getUpdates → look for negative chat.id
-const TG_BOT_TOKEN = 'YOUR_BOT_TOKEN';
-const TG_CHAT_IDS = ['YOUR_CHAT_ID']; // e.g. ['782166806', '-4567890123']
+const TG_BOT_TOKEN = '8633890890:AAEp8zXhAP43z1o8gchJ9vv1XTP4DYKL5l';
+const TG_CHAT_IDS = ['782166806', '-5214514656']; // e.g. ['782166806', '-4567890123']
+
 
 function tgPersistConfig() {
   try {

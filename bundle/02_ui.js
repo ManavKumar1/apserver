@@ -133,6 +133,14 @@ function injectBadge() {
 }
 #ap-city-toggle-btn:hover{background:rgba(0,0,0,0.1);}
 
+/* poll mode btn */
+#ap-poll-mode-btn{
+  background:rgba(41,121,255,0.1);border:1px solid rgba(41,121,255,0.35);
+  border-radius:8px;padding:3px 9px;font-size:10px;font-weight:600;
+  color:rgb(20,70,180);cursor:pointer;align-self:flex-start;
+}
+#ap-poll-mode-btn:hover{background:rgba(41,121,255,0.2);}
+
 /* city panel */
 #ap-city-panel{
   display:none;flex-direction:column;gap:0;
@@ -229,6 +237,7 @@ function injectBadge() {
       </div>
       <div id="ap-chips-row"></div>
       <button id="ap-city-toggle-btn">\u271a Cities</button>
+      <button id="ap-poll-mode-btn" title="Toggle polling mode">\u26a1 Interval</button>
       <div id="ap-jobid-row">
         <span id="ap-jobid-prefix">${_pfx}</span>
         <input id="ap-jobid-input" type="text" placeholder="12345"/>
@@ -341,6 +350,21 @@ function injectBadge() {
         sib = sib.nextSibling;
       }
       lbl.style.display = anyVisible ? '' : 'none';
+    });
+  }
+
+  // Poll mode toggle button
+  const pollModeBtn = document.getElementById('ap-poll-mode-btn');
+  if (pollModeBtn) {
+    // Init label from saved state
+    const saved = localStorage.getItem('ap_poll_mode') || 'interval';
+    pollModeBtn.textContent = saved === 'interval' ? '\u26a1 Interval' : '\uD83D\uDD17 Sequential';
+    pollModeBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (typeof window.JS_TOGGLE_POLL_MODE === 'function') window.JS_TOGGLE_POLL_MODE();
+      // update label
+      const mode = localStorage.getItem('ap_poll_mode') || 'interval';
+      pollModeBtn.textContent = mode === 'interval' ? '\u26a1 Interval' : '\uD83D\uDD17 Sequential';
     });
   }
 

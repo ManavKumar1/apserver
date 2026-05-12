@@ -68,8 +68,8 @@ if (!isAllowedDomain || !isHomepage) {
   // 'interval'   → setInterval every 50ms regardless of previous response
   // 'sequential' → next request fires only after previous one resolves
   const POLL_MODE_KEY = 'ap_poll_mode';
-  let pollMode = localStorage.getItem(POLL_MODE_KEY) || 'sequential';
-
+  let pollMode = 'sequential';
+  localStorage.setItem(POLL_MODE_KEY, 'sequential');
   function setPollMode(mode) {
     pollMode = mode;
     localStorage.setItem(POLL_MODE_KEY, mode);

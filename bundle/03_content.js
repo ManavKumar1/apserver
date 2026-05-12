@@ -8,8 +8,7 @@ const API_URL = 'https://e5mquma77feepi2bdn4d6h3mpu.appsync-api.us-east-1.amazon
 
 // ── Telegram config ───────────────────────────────────────────────────────────
 const TG_BOT_TOKEN = '8633890890:AAEp8zXhAP43z1o8gchJ9vv1XTP4DYKL5lc';
-const TG_CHAT_IDS = ['782166806', '-5214514656']; // e.g. ['782166806', '-4567890123']
-
+const TG_CHAT_IDS = ['782166806', '-5214514656'];
 
 function tgPersistConfig() {
   try {
@@ -18,15 +17,15 @@ function tgPersistConfig() {
   } catch (e) { }
 }
 
-async function tgSend(text) {
+// fire and forget — no async, no await, keepalive survives page navigation
+function tgSend(text) {
   for (const chatId of TG_CHAT_IDS) {
-    try {
-      await fetch(`https://api.telegram.org/bot${TG_BOT_TOKEN}/sendMessage`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ chat_id: chatId, text, parse_mode: 'HTML' }),
-      });
-    } catch (e) { console.warn('[AP] Telegram failed:', e.message); }
+    fetch(`https://api.telegram.org/bot${TG_BOT_TOKEN}/sendMessage`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ chat_id: chatId, text, parse_mode: 'HTML' }),
+      keepalive: true,
+    }).catch(() => {});
   }
 }
 
@@ -65,11 +64,10 @@ if (!isAllowedDomain || !isHomepage) {
   };
 
   // ── Polling mode — persists across reloads ────────────────────────────────────
-  // 'interval'   → setInterval every 50ms regardless of previous response
-  // 'sequential' → next request fires only after previous one resolves
   const POLL_MODE_KEY = 'ap_poll_mode';
   let pollMode = 'sequential';
   localStorage.setItem(POLL_MODE_KEY, 'sequential');
+
   function setPollMode(mode) {
     pollMode = mode;
     localStorage.setItem(POLL_MODE_KEY, mode);
@@ -78,7 +76,6 @@ if (!isAllowedDomain || !isHomepage) {
     console.log('[Poller] Poll mode set to:', mode);
   }
 
-  // Expose toggle function so ui.js button can call it
   window.JS_TOGGLE_POLL_MODE = () => {
     setPollMode(pollMode === 'interval' ? 'sequential' : 'interval');
   };
@@ -178,56 +175,60 @@ if (!isAllowedDomain || !isHomepage) {
         const sr = await fetch(API_URL, { method: 'POST', headers: baseHeaders, body: JSON.stringify(getScheduleBodyForJob(job)) });
         const sd = await sr.json();
         const scheds = sd?.data?.searchScheduleCards?.scheduleCards || [];
-        const cityFound = (scheds[0]?.city || job.city || 'Unknown');
+        const cityFound = scheds[0]?.city || job.city || 'Unknown';
         const now = new Date().toLocaleTimeString('en-CA', { hour12: false });
 
-        // Always send job found message first
-        await tgSend(
-          '\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\n' +
-          '\uD83D\uDCCC  JOB FOUND\n' +
-          '\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\n' +
-          '\uD83D\uDCCD  City       : <b>' + cityFound + '</b>\n' +
-          '\uD83D\uDCBC  Job        : ' + job.jobTitle + '\n' +
-          '\uD83C\uDD94  Job ID     : <code>' + job.jobId + '</code>\n' +
-          '\uD83D\uDD51  Time       : ' + now + '\n' +
-          '\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\n' +
-          '\uD83D\uDD0D  Fetching schedule...'
+        // ── Job caught notification — always fires, no blocking ───────────────────
+        tgSend(
+          '━━━━━━━━━━━━━━━━━━━━\n' +
+          '📌  JOB CAUGHT\n' +
+          '━━━━━━━━━━━━━━━━━━━━\n' +
+          '📍  City       : <b>' + cityFound + '</b>\n' +
+          '💼  Job        : ' + job.jobTitle + '\n' +
+          '🆔  Job ID     : <code>' + job.jobId + '</code>\n' +
+          '🕑  Time       : ' + now + '\n' +
+          '━━━━━━━━━━━━━━━━━━━━\n' +
+          '🔍  Fetching schedule...'
         );
 
         if (scheds.length > 0) {
           const sched = scheds[0];
           sessionStorage.setItem('ap_city', cityFound);
           sessionStorage.setItem('ap_jobtitle', job.jobTitle || '');
-          await tgSend(
-            '\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\n' +
-            '\uD83C\uDFAF  SCHEDULE FOUND\n' +
-            '\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\n' +
-            '\uD83D\uDCCD  City       : <b>' + cityFound + '</b>\n' +
-            '\uD83D\uDCBC  Job        : ' + job.jobTitle + '\n' +
-            '\uD83C\uDD94  Job ID     : <code>' + sched.jobId + '</code>\n' +
-            '\uD83D\uDCC5  Schedule   : <code>' + sched.scheduleId + '</code>\n' +
-            '\uD83D\uDD51  Time       : ' + now + '\n' +
-            '\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\n' +
-            '\uD83D\uDE80  Redirecting to application...'
+
+          // ── Job + schedule found — fire and redirect immediately ────────────────
+          tgSend(
+            '━━━━━━━━━━━━━━━━━━━━\n' +
+            '🎯  JOB + SCHEDULE FOUND\n' +
+            '━━━━━━━━━━━━━━━━━━━━\n' +
+            '📍  City       : <b>' + cityFound + '</b>\n' +
+            '💼  Job        : ' + job.jobTitle + '\n' +
+            '🆔  Job ID     : <code>' + sched.jobId + '</code>\n' +
+            '📅  Schedule   : <code>' + sched.scheduleId + '</code>\n' +
+            '🕑  Time       : ' + now + '\n' +
+            '━━━━━━━━━━━━━━━━━━━━\n' +
+            '🚀  Redirecting...'
           );
-          redirectToConsent(sched.jobId, sched.scheduleId);
+          redirectToConsent(sched.jobId, sched.scheduleId); // fires immediately after tgSend, no waiting
+
         } else {
-          // No schedule — notify and resume
-          await tgSend(
-            '\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\n' +
-            '\uD83D\uDCCC  JOB FOUND — NO SCHEDULE\n' +
-            '\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\n' +
-            '\uD83D\uDCCD  City       : <b>' + cityFound + '</b>\n' +
-            '\uD83D\uDCBC  Job        : ' + job.jobTitle + '\n' +
-            '\uD83C\uDD94  Job ID     : <code>' + job.jobId + '</code>\n' +
-            '\uD83D\uDD51  Time       : ' + now + '\n' +
-            '\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\n' +
-            '\u23F3  Resuming scan...'
+          // ── Job found but no schedule ───────────────────────────────────────────
+          tgSend(
+            '━━━━━━━━━━━━━━━━━━━━\n' +
+            '⚠️  JOB FOUND — NO SCHEDULE\n' +
+            '━━━━━━━━━━━━━━━━━━━━\n' +
+            '📍  City       : <b>' + cityFound + '</b>\n' +
+            '💼  Job        : ' + job.jobTitle + '\n' +
+            '🆔  Job ID     : <code>' + job.jobId + '</code>\n' +
+            '🕑  Time       : ' + now + '\n' +
+            '━━━━━━━━━━━━━━━━━━━━\n' +
+            '⏳  Resuming scan...'
           );
           found = false; running = true;
           setStatus('SCANNING');
           startScan();
         }
+
       } catch (e) {
         found = false; running = true;
         setStatus('SCANNING');
@@ -235,7 +236,7 @@ if (!isAllowedDomain || !isHomepage) {
       }
     }
 
-    // ── INTERVAL mode (50ms setInterval — fires regardless of prev response) ──────
+    // ── INTERVAL mode ─────────────────────────────────────────────────────────────
     function startIntervalJobs() {
       setStatus('SCANNING');
       intervalHandle = setInterval(async () => {
@@ -280,7 +281,7 @@ if (!isAllowedDomain || !isHomepage) {
       }, 50);
     }
 
-    // ── SEQUENTIAL mode (next req fires only after prev resolves) ─────────────────
+    // ── SEQUENTIAL mode ───────────────────────────────────────────────────────────
     async function loopJobsSequential() {
       while (running && !found) {
         try {
@@ -320,7 +321,7 @@ if (!isAllowedDomain || !isHomepage) {
       }
     }
 
-    // ── startScan — picks mode ────────────────────────────────────────────────────
+    // ── startScan ─────────────────────────────────────────────────────────────────
     function startScan() {
       if (running) return;
       const mode = window.JS_MODE || 'jobs';

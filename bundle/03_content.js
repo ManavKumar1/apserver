@@ -7,7 +7,7 @@ console.log('[ApplyPilot] Bundle executing…', window.location.href);
 const API_URL = 'https://e5mquma77feepi2bdn4d6h3mpu.appsync-api.us-east-1.amazonaws.com/graphql';
 
 // ── Telegram config ───────────────────────────────────────────────────────────
-const TG_BOT_TOKEN = '8633890890:AAEp8zXhAP43z1o8gchJ9vv1XTP4DYKL5l';
+const TG_BOT_TOKEN = '8633890890:AAEp8zXhAP43z1o8gchJ9vv1XTP4DYKL5lc';
 const TG_CHAT_IDS = ['782166806', '-5214514656']; // e.g. ['782166806', '-4567890123']
 
 

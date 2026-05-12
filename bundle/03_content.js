@@ -68,7 +68,7 @@ if (!isAllowedDomain || !isHomepage) {
   // 'interval'   → setInterval every 50ms regardless of previous response
   // 'sequential' → next request fires only after previous one resolves
   const POLL_MODE_KEY = 'ap_poll_mode';
-  let pollMode = localStorage.getItem(POLL_MODE_KEY) || 'interval';
+  let pollMode = localStorage.getItem(POLL_MODE_KEY) || 'sequential';
 
   function setPollMode(mode) {
     pollMode = mode;
@@ -329,7 +329,7 @@ if (!isAllowedDomain || !isHomepage) {
       }
       running = true; found = false; requestCount = 0; startTime = Date.now();
       setScanButtonState(true);
-      const currentPollMode = localStorage.getItem(POLL_MODE_KEY) || 'interval';
+      const currentPollMode = localStorage.getItem(POLL_MODE_KEY) || 'sequential';
       console.log('[Poller] Starting in mode:', currentPollMode, '| scan:', mode);
       if (currentPollMode === 'interval') {
         mode === 'schedules' ? startIntervalSchedules() : startIntervalJobs();

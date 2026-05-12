@@ -357,7 +357,7 @@ function injectBadge() {
   const pollModeBtn = document.getElementById('ap-poll-mode-btn');
   if (pollModeBtn) {
     // Init label from saved state
-    const saved = localStorage.getItem('ap_poll_mode') || 'interval';
+   const saved = localStorage.getItem('ap_poll_mode') || 'sequential';
     pollModeBtn.textContent = saved === 'interval' ? '\u26a1 Interval' : '\uD83D\uDD17 Sequential';
     pollModeBtn.addEventListener('click', (e) => {
       e.stopPropagation();

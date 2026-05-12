@@ -1,5 +1,5 @@
 // ui.js — Badge UI with city selector panel
-
+const AP_VERSION = '1.0.1';
 const PRESET_CITIES = [
   // Ontario
   'Brampton', 'Mississauga', 'Etobicoke', 'Concord', 'Oakville', 'Cambridge',
@@ -86,6 +86,8 @@ function injectBadge() {
   display:flex; flex-direction:column; align-items:flex-end; gap:6px;
   font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; user-select:none;
 }
+#ap-label{color:rgb(30,30,30);font-size:11.5px;font-weight:700;letter-spacing:0.04em;text-transform:uppercase;line-height:1.3;}
+#ap-version{color:rgb(180,180,180);font-size:9px;font-weight:600;letter-spacing:0.04em;}
 #ap-pill {
   display:flex; align-items:flex-start;
   background:linear-gradient(135deg,rgba(255,255,255,0.6),rgba(255,255,255,0.4));
@@ -230,6 +232,7 @@ function injectBadge() {
     <span id="ap-dot"></span>
     <div id="ap-body">
       <span id="ap-label">Starting\u2026</span>
+      <span id="ap-version">v${AP_VERSION}</span> 
       <span id="ap-stopwatch">00:00</span>
       <div id="ap-mode-row">
         <label id="ap-mode-toggle"><input type="checkbox" id="ap-mode-cb"/><span id="ap-mode-slider"></span></label>

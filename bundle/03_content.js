@@ -34,6 +34,12 @@ const pathname = window.location.pathname;
 const ALLOWED_HOSTS = ['hiring.amazon.com', 'hiring.amazon.ca'];
 const isAllowedDomain = ALLOWED_HOSTS.some(h => hostname === h);
 const isHomepage = pathname === '/' || pathname === '' || pathname === '/app';
+const isCanada = hostname.includes('.ca');
+
+const API_URL = isCanada
+  ? 'https://hiring.amazon.ca/graphql'
+  : 'https://hiring.amazon.com/graphql';
+
 
 if (!isAllowedDomain || !isHomepage) {
   // not homepage — do nothing
@@ -46,7 +52,6 @@ if (!isAllowedDomain || !isHomepage) {
     else document.addEventListener('DOMContentLoaded', injectBadge);
   } catch (e) { console.error('[AP] injectBadge CRASHED:', e); }
 
-  const isCanada = hostname.includes('.ca');
   const locale = isCanada ? 'en-CA' : 'en-US';
   const country = isCanada ? 'Canada' : 'United States';
   const today = new Date().toISOString().split('T')[0];

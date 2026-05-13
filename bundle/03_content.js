@@ -101,21 +101,34 @@ if (!isAllowedDomain || !isHomepage) {
     let intervalHandle = null;
 
     // ── Query builders ────────────────────────────────────────────────────────────
-    const getJobsBody = () => ({
-      query: `query searchJobCardsByLocation($searchJobRequest: SearchJobRequest!) {
-        searchJobCardsByLocation(searchJobRequest: $searchJobRequest) {
-          jobCards { jobId jobTitle city }
-        }
-      }`,
-      variables: {
-        searchJobRequest: {
-          locale, country, keyWords: '',
-          dateFilters: [{ key: 'firstDayOnSite', range: { startDate: today } }],
-          sorters: [{ fieldName: 'totalPayRateMax', ascending: 'false' }],
-        }
-      },
-      operationName: 'searchJobCardsByLocation',
-    });
+const getJobsBody = () => ({
+  operationName: 'searchJobCardsByLocation',
+  query: `query searchJobCardsByLocation($searchJobRequest: SearchJobRequest!) {
+    searchJobCardsByLocation(searchJobRequest: $searchJobRequest) {
+      nextToken
+      jobCards { jobId jobTitle city state locationName totalPayRateMax surgePay bonusPay featuredJob }
+    }
+  }`,
+  variables: {
+    searchJobRequest: {
+      locale,
+      country,
+      keyWords: '',
+      pageSize: 100,
+      consolidateSchedule: true,
+      sorters: [{ fieldName: 'totalPayRateMax', ascending: 'false' }],
+      dateFilters: [{ key: 'firstDayOnSite', range: { startDate: today } }],
+      equalFilters: isCanada
+        ? []
+        : [{ key: 'scheduleRequiredLanguage', val: locale }],
+      containFilters: [{ key: 'isPrivateSchedule', val: ['false','true'] }],
+      rangeFilters: isCanada
+        ? []
+        : [{ key: 'hoursPerWeek', range: { minimum: 0, maximum: 80 } }],
+      orFilters: [],
+    }
+  },
+});
 
     const getScheduleBodyForJob = (job) => ({
       operationName: 'searchScheduleCards',

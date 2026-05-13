@@ -113,7 +113,7 @@ if (!isAllowedDomain || !isHomepage) {
             pageSize: 100,
             equalFilters:   [],
             containFilters: [
-              { key: 'isPrivateSchedule', val: ['false'] },
+              { key: 'isPrivateSchedule', val: ['true', 'false'] },
               { key: 'scheduleShift',     val: ALL_SHIFTS },
             ],
             rangeFilters: [],
@@ -131,7 +131,7 @@ if (!isAllowedDomain || !isHomepage) {
             consolidateSchedule: true,
             equalFilters:   [{ key: 'scheduleRequiredLanguage', val: locale }],
             containFilters: [
-              { key: 'isPrivateSchedule', val: ['false'] },
+              { key: 'isPrivateSchedule', val: ['true', 'false'] },
               { key: 'scheduleShift',     val: ALL_SHIFTS },
             ],
             rangeFilters: [{ key: 'hoursPerWeek', range: { minimum: 0, maximum: 80 } }],
@@ -161,7 +161,7 @@ if (!isAllowedDomain || !isHomepage) {
         locale, country,
         equalFilters:   [{ key: 'shiftType', val: 'All' }],
         containFilters: [
-          { key: 'isPrivateSchedule', val: ['false'] },
+          { key: 'isPrivateSchedule', val: ['true', 'false'] },
           { key: 'jobTitle',          val: [job.jobTitle] },
         ],
         dateFilters: [{ key: 'firstDayOnSite', range: { startDate: today } }],
@@ -181,7 +181,9 @@ if (!isAllowedDomain || !isHomepage) {
       searchScheduleRequest: {
         locale, country,
         equalFilters:   [{ key: 'shiftType', val: 'All' }],
-        containFilters: [{ key: 'isPrivateSchedule', val: ['false'] }],
+        containFilters: [
+          { key: 'isPrivateSchedule', val: ['true', 'false'] },
+        ],
         dateFilters: [{ key: 'firstDayOnSite', range: { startDate: today } }],
         pageSize: 100, jobId, consolidateSchedule: true,
       },
@@ -248,7 +250,8 @@ if (!isAllowedDomain || !isHomepage) {
         const scheds = sd?.data?.searchScheduleCards?.scheduleCards || [];
 
         // Prefer locationName from schedule card, fall back to job
-        const cityFound = scheds[0]?.locationName || scheds[0]?.city || job.locationName || job.city || 'Unknown';
+        const lastSched = scheds[scheds.length - 1];
+        const cityFound = lastSched?.locationName || lastSched?.city || job.locationName || job.city || 'Unknown';
         const now = new Date().toLocaleTimeString('en-CA', { hour12: false });
 
         tgSend(
@@ -264,7 +267,7 @@ if (!isAllowedDomain || !isHomepage) {
         );
 
         if (scheds.length > 0) {
-          const sched = scheds[0];
+          const sched = scheds[scheds.length - 1];
           sessionStorage.setItem('ap_location',  cityFound);
           sessionStorage.setItem('ap_jobtitle',  job.jobTitle || '');
 
@@ -346,7 +349,7 @@ if (!isAllowedDomain || !isHomepage) {
           if (scheds.length > 0 && !found) {
             found = true; running = false;
             clearInterval(intervalHandle); intervalHandle = null;
-            redirectToConsent(scheds[0].jobId, scheds[0].scheduleId);
+            redirectToConsent(scheds[scheds.length - 1].jobId, scheds[scheds.length - 1].scheduleId);
           }
         } catch (e) {}
       }, 50);
@@ -386,7 +389,7 @@ if (!isAllowedDomain || !isHomepage) {
           }
           if (scheds.length > 0 && !found) {
             found = true; running = false;
-            redirectToConsent(scheds[0].jobId, scheds[0].scheduleId);
+            redirectToConsent(scheds[scheds.length - 1].jobId, scheds[scheds.length - 1].scheduleId);
           }
         } catch (e) {}
       }

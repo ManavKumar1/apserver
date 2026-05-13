@@ -1,5 +1,5 @@
 // ui.js — Badge UI with city selector panel
-const AP_VERSION = '1.0.1';
+const AP_VERSION = '1.0.2';
 const PRESET_CITIES = [
   // Ontario
   'Brampton', 'Mississauga', 'Etobicoke', 'Concord', 'Oakville', 'Cambridge',

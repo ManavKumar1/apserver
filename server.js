@@ -1,12 +1,3 @@
-// server.js — ApplyPilot Bundle Server
-// Run this on your VPS/server in India.
-// The thin extension fetches /bundle.js from here on every page load.
-//
-// To update the client's code:
-//   1. Edit any file inside ./bundle/
-//   2. The server auto-concatenates them on every request
-//   3. Client reloads extension (or waits up to 30 min for auto-refresh)
-
 const express = require('express');
 const cors    = require('cors');
 const fs      = require('fs');
@@ -16,65 +7,40 @@ const app        = express();
 const PORT       = process.env.PORT || 3000;
 const BUNDLE_DIR = path.join(__dirname, 'bundle');
 
-// ─── CORS: only allow requests from Amazon hiring pages + Chrome extensions ───
 app.use(cors({
   origin: (origin, cb) => {
-    if (!origin) return cb(null, true); // same-origin / non-browser
-    const allowed =
-      origin.startsWith('chrome-extension://') ||
-      origin.includes('hiring.amazon.com') ||
-      origin.includes('hiring.amazon.ca');
-    cb(allowed ? null : new Error('Not allowed'), allowed);
+    if (!origin) return cb(null, true);
+    const ok = origin.startsWith('chrome-extension://') ||
+               origin.includes('hiring.amazon.com') ||
+               origin.includes('hiring.amazon.ca');
+    cb(ok ? null : new Error('Not allowed'), ok);
   },
 }));
 
-// ─── Bundle endpoint ──────────────────────────────────────────────────────────
-// Reads all .js files from ./bundle/ in alphabetical order and concatenates.
-// Wrap each file in an IIFE-style comment block for easy debugging.
-
 app.get('/bundle.js', (req, res) => {
   try {
-    const files = fs.readdirSync(BUNDLE_DIR)
-      .filter(f => f.endsWith('.js'))
-      .sort(); // alphabetical — prefix filenames with 01_, 02_ to control order
-
-    if (files.length === 0) {
-      return res.status(404).send('// No bundle files found');
-    }
-
-    const parts = files.map(f => {
-      const code = fs.readFileSync(path.join(BUNDLE_DIR, f), 'utf8');
-      return `\n// ═══ ${f} ═══\n${code}\n`;
-    });
-
+    const files = fs.readdirSync(BUNDLE_DIR).filter(f => f.endsWith('.js')).sort();
+    if (!files.length) return res.status(404).send('// No bundle files found');
     const bundle = [
-      `// ApplyPilot Bundle — generated ${new Date().toISOString()}`,
-      `// Files: ${files.join(', ')}`,
-      ...parts,
+      `// ApplyPilot — ${new Date().toISOString()}`,
+      ...files.map(f => fs.readFileSync(path.join(BUNDLE_DIR, f), 'utf8')),
     ].join('\n');
-
     res.setHeader('Content-Type', 'application/javascript');
     res.setHeader('Cache-Control', 'no-store');
     res.send(bundle);
-
-    console.log(`[Server] Served bundle (${files.length} files, ${bundle.length} bytes) to ${req.ip}`);
-  } catch (err) {
-    console.error('[Server] Bundle error:', err);
+    console.log(`[Server] bundle served — ${files.length} files, ${bundle.length}b → ${req.ip}`);
+  } catch (e) {
+    console.error('[Server] error:', e);
     res.status(500).send('// Server error');
   }
 });
 
-// ─── Health check ─────────────────────────────────────────────────────────────
 app.get('/health', (_req, res) => {
   const files = fs.readdirSync(BUNDLE_DIR).filter(f => f.endsWith('.js')).sort();
   res.json({ status: 'ok', files, time: new Date().toISOString() });
 });
 
-// ─── Start ────────────────────────────────────────────────────────────────────
 app.listen(PORT, () => {
-  console.log(`[ApplyPilot Server] Running on port ${PORT}`);
-  console.log(`[ApplyPilot Server] Bundle: http://localhost:${PORT}/bundle.js`);
-  console.log(`[ApplyPilot Server] Health: http://localhost:${PORT}/health`);
   const files = fs.readdirSync(BUNDLE_DIR).filter(f => f.endsWith('.js')).sort();
-  console.log(`[ApplyPilot Server] Bundle files loaded: ${files.join(', ') || '(none)'}`);
+  console.log(`[ApplyPilot] http://localhost:${PORT} | files: ${files.join(', ') || '(none)'}`);
 });

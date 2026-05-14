@@ -111,7 +111,7 @@ if (!isAllowedDomain || !isHomepage) {
         searchJobRequest: {
           locale, country, keyWords: '',
           containFilters: [{key: "isPrivateSchedule", val: ["false","true"]}],
-          pageSize: 100,
+          pageSize: 20,
           rangeFilters: [],
           dateFilters: [{ key: 'firstDayOnSite', range: { startDate: today } }],
           sorters: [{ fieldName: 'totalPayRateMax', ascending: 'false' }],

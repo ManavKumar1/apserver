@@ -1,53 +1,60 @@
-// ui.js — Badge UI with city selector panel
-const AP_VERSION = '1.0.1';
-const PRESET_CITIES = [
+// ui.js — Badge UI with location selector panel (include / exclude mode)
+const AP_VERSION = '1.0.2';
+
+const LOCATIONS = [
   // Ontario
-  'Brampton', 'Mississauga', 'Etobicoke', 'Concord', 'Oakville', 'Cambridge',
-  'Kitchener', 'Hamilton', 'Stony Creek', 'Scarborough', 'Toronto', 'Richmond Hill',
-  'Whitby', 'Ajax', 'Bolton', 'St Thomas', 'London', 'Windsor', 'Belleville',
-  'Ottawa', 'Barrhaven',
+  'Brampton, ON', 'Mississauga, ON', 'Etobicoke, ON', 'Concord, ON', 'Oakville, ON',
+  'Cambridge, ON', 'Kitchener, ON', 'Hamilton, ON', 'Stony Creek, ON', 'Scarborough, ON',
+  'Toronto, ON', 'Richmond Hill, ON', 'Whitby, ON', 'Ajax, ON', 'Bolton, ON',
+  'St Thomas, ON', 'London, ON', 'Windsor, ON', 'Belleville, ON', 'Ottawa, ON', 'Barrhaven, ON',
   // Alberta
-  'Edmonton', 'Acheson', 'Nisku', 'Calgary', 'Balzac', 'Rocky View County',
+  'Edmonton, AB', 'Acheson, AB', 'Nisku, AB', 'Calgary, AB', 'Balzac, AB', 'Rocky View County, AB',
   // British Columbia
-  'Sidney', 'Delta', 'Burnaby', 'Langley', 'Richmond', 'New Westminster',
-  'Pitt Meadows', 'Coquitlam', 'Tsawwassen First Nation',
+  'Sidney, BC', 'Delta, BC', 'Burnaby, BC', 'Langley, BC', 'Richmond, BC',
+  'New Westminster, BC', 'Pitt Meadows, BC', 'Coquitlam, BC', 'Tsawwassen First Nation, BC',
   // Nova Scotia
-  'Dartmouth',
+  'Dartmouth, NS',
   // Manitoba
-  'Winnipeg',
+  'Winnipeg, MB',
 ];
 
 const PROVINCE_GROUPS = {
-  'Ontario': ['Brampton', 'Mississauga', 'Etobicoke', 'Concord', 'Oakville', 'Cambridge', 'Kitchener', 'Hamilton', 'Stony Creek', 'Scarborough', 'Toronto', 'Richmond Hill', 'Whitby', 'Ajax', 'Bolton', 'St Thomas', 'London', 'Windsor', 'Belleville', 'Ottawa', 'Barrhaven'],
-  'Alberta': ['Edmonton', 'Acheson', 'Nisku', 'Calgary', 'Balzac', 'Rocky View County'],
-  'British Columbia': ['Sidney', 'Delta', 'Burnaby', 'Langley', 'Richmond', 'New Westminster', 'Pitt Meadows', 'Coquitlam', 'Tsawwassen First Nation'],
-  'Nova Scotia': ['Dartmouth'],
-  'Manitoba': ['Winnipeg'],
+  'Ontario':          LOCATIONS.filter(l => l.endsWith(', ON')),
+  'Alberta':          LOCATIONS.filter(l => l.endsWith(', AB')),
+  'British Columbia': LOCATIONS.filter(l => l.endsWith(', BC')),
+  'Nova Scotia':      LOCATIONS.filter(l => l.endsWith(', NS')),
+  'Manitoba':         LOCATIONS.filter(l => l.endsWith(', MB')),
 };
 
-const STORAGE_KEY_CITIES = 'ap_selected_cities';
-const STORAGE_KEY_MODE = 'ap_mode';
-const STORAGE_KEY_JOBID = 'ap_job_id';
+const STORAGE_KEY_LOCS    = 'ap_selected_locs';
+const STORAGE_KEY_LOCMODE = 'ap_loc_mode';   // 'include' | 'exclude'
+const STORAGE_KEY_MODE    = 'ap_mode';
+const STORAGE_KEY_JOBID   = 'ap_job_id';
 
 const STATUS = {
-  SCANNING: { label: 'Scanning Jobs\u2026', color: '#00c853', pulse: true },
-  POLLING: { label: 'Polling Schedules\u2026', color: '#00c853', pulse: true },
-  SCHEDULING: { label: 'Fetching Schedule\u2026', color: '#ff9100', pulse: true },
-  APPLYING: { label: 'Creating Application\u2026', color: '#2979ff', pulse: true },
-  QUESTIONS: { label: 'Answering Questions\u2026', color: '#aa00ff', pulse: true },
-  APPLIED: { label: 'Job Applied \u2713', color: '#00897b', pulse: false },
-  IDLE: { label: 'Idle \u2014 Starting\u2026', color: '#9e9e9e', pulse: false },
-  STOPPED: { label: 'Restarting\u2026', color: '#ff9100', pulse: true },
-  NO_JOB_ID: { label: 'Enter a Job ID first', color: '#ef5350', pulse: false },
+  SCANNING:   { label: 'Scanning Jobs\u2026',          color: '#00c853', pulse: true  },
+  POLLING:    { label: 'Polling Schedules\u2026',       color: '#00c853', pulse: true  },
+  SCHEDULING: { label: 'Fetching Schedule\u2026',       color: '#ff9100', pulse: true  },
+  APPLYING:   { label: 'Creating Application\u2026',    color: '#2979ff', pulse: true  },
+  QUESTIONS:  { label: 'Answering Questions\u2026',     color: '#aa00ff', pulse: true  },
+  APPLIED:    { label: 'Job Applied \u2713',            color: '#00897b', pulse: false },
+  IDLE:       { label: 'Idle \u2014 Starting\u2026',    color: '#9e9e9e', pulse: false },
+  STOPPED:    { label: 'Restarting\u2026',              color: '#ff9100', pulse: true  },
+  NO_JOB_ID:  { label: 'Enter a Job ID first',          color: '#ef5350', pulse: false },
 };
 
-window.JS_MODE = 'jobs';
-window.JS_CITY_FILTERS = [];
-window.JS_CITY_FILTER = '';
-window.JS_JOB_ID = '';
+// Globals read by content.js
+window.JS_MODE           = 'jobs';
+window.JS_LOC_FILTERS    = [];   // selected location strings e.g. ['Brampton, ON']
+window.JS_LOC_MODE       = 'include'; // 'include' | 'exclude'
+window.JS_JOB_ID         = '';
+
+// Legacy aliases kept so content.js city-filter code still compiles harmlessly
+window.JS_CITY_FILTERS   = [];
+window.JS_CITY_FILTER    = '';
 
 function storageSave(key, value) {
-  try { localStorage.setItem(key, JSON.stringify(value)); } catch (e) { }
+  try { localStorage.setItem(key, JSON.stringify(value)); } catch (e) {}
 }
 function storageLoad(key, cb) {
   try { const v = localStorage.getItem(key); cb(v !== null ? JSON.parse(v) : null); }
@@ -71,7 +78,11 @@ function startStopwatch() {
 }
 function stopStopwatch(reset = false) {
   clearInterval(_swInterval); _swInterval = null;
-  if (reset) { _swSeconds = 0; const el = document.getElementById('js-stopwatch'); if (el) { el.textContent = '00:00'; el.style.display = 'none'; } }
+  if (reset) {
+    _swSeconds = 0;
+    const el = document.getElementById('js-stopwatch');
+    if (el) { el.textContent = '00:00'; el.style.display = 'none'; }
+  }
 }
 
 let badgeEl = null, startBtnEl = null;
@@ -86,13 +97,11 @@ function injectBadge() {
   display:flex; flex-direction:column; align-items:flex-end; gap:6px;
   font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; user-select:none;
 }
-#ap-label{color:rgb(30,30,30);font-size:11.5px;font-weight:700;letter-spacing:0.04em;text-transform:uppercase;line-height:1.3;}
-#ap-version{color:rgb(180,180,180);font-size:9px;font-weight:600;letter-spacing:0.04em;}
 #ap-pill {
   display:flex; align-items:flex-start;
   background:linear-gradient(135deg,rgba(255,255,255,0.6),rgba(255,255,255,0.4));
   backdrop-filter:blur(18px) saturate(160%); -webkit-backdrop-filter:blur(18px) saturate(160%);
-  border-radius:18px; padding:12px 10px 12px 14px; gap:10px; width:310px;
+  border-radius:18px; padding:12px 10px 12px 14px; gap:10px; width:320px;
   border:1px solid rgba(255,255,255,0.4);
   box-shadow:inset 0 1px 0 rgba(255,255,255,0.7),0 6px 25px rgba(0,0,0,0.3);
   cursor:grab;
@@ -103,9 +112,10 @@ function injectBadge() {
 @keyframes apDotPulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:0.3;transform:scale(0.7)}}
 #ap-body{display:flex;flex-direction:column;flex:1;min-width:0;gap:6px;}
 #ap-label{color:rgb(30,30,30);font-size:11.5px;font-weight:700;letter-spacing:0.04em;text-transform:uppercase;line-height:1.3;}
+#ap-version{color:rgb(180,180,180);font-size:9px;font-weight:600;letter-spacing:0.04em;}
 #ap-stopwatch{color:rgb(80,80,80);font-size:10px;font-weight:600;font-variant-numeric:tabular-nums;display:none;}
 
-/* mode row */
+/* scan mode row */
 #ap-mode-row{display:flex;align-items:center;gap:6px;}
 #ap-mode-toggle{position:relative;width:36px;height:17px;flex-shrink:0;}
 #ap-mode-toggle input{opacity:0;width:0;height:0;}
@@ -117,77 +127,73 @@ function injectBadge() {
 
 /* selected chips row */
 #ap-chips-row{display:flex;flex-wrap:wrap;gap:3px;min-height:14px;}
-#ap-chips-row:empty::before{content:'All cities';color:rgb(170,170,170);font-size:9.5px;font-style:italic;line-height:1.6;}
+#ap-chips-row:empty::before{
+  content: attr(data-empty-label);
+  color:rgb(170,170,170);font-size:9.5px;font-style:italic;line-height:1.6;
+}
 .ap-chip{
   display:inline-flex;align-items:center;gap:2px;
-  background:rgba(0,180,70,0.12);border:1px solid rgba(0,180,70,0.35);
   border-radius:20px;padding:1px 7px 1px 8px;
-  font-size:9.5px;font-weight:600;color:rgb(0,110,45);white-space:nowrap;
+  font-size:9.5px;font-weight:600;white-space:nowrap;
 }
+.ap-chip.inc{background:rgba(0,180,70,0.12);border:1px solid rgba(0,180,70,0.35);color:rgb(0,110,45);}
+.ap-chip.exc{background:rgba(239,83,80,0.10);border:1px solid rgba(239,83,80,0.35);color:rgb(180,30,30);}
 .ap-chip-x{cursor:pointer;font-size:11px;opacity:0.5;margin-left:1px;}
 .ap-chip-x:hover{opacity:1;}
 
-/* city selector toggle btn */
-#ap-city-toggle-btn{
+/* location panel controls row */
+#ap-loc-ctrl-row{display:flex;align-items:center;gap:5px;flex-wrap:wrap;}
+
+/* location toggle btn */
+#ap-loc-toggle-btn{
   background:rgba(0,0,0,0.06);border:1px solid rgba(0,0,0,0.12);
   border-radius:8px;padding:3px 9px;font-size:10px;font-weight:600;
-  color:rgb(60,60,60);cursor:pointer;align-self:flex-start;
+  color:rgb(60,60,60);cursor:pointer;
 }
-#ap-city-toggle-btn:hover{background:rgba(0,0,0,0.1);}
+#ap-loc-toggle-btn:hover{background:rgba(0,0,0,0.1);}
+
+/* include/exclude toggle */
+#ap-inc-exc-btn{
+  border-radius:8px;padding:3px 9px;font-size:10px;font-weight:700;
+  cursor:pointer;transition:background 0.2s,color 0.2s,border-color 0.2s;
+}
+#ap-inc-exc-btn.inc{
+  background:rgba(0,200,83,0.12);border:1px solid rgba(0,200,83,0.4);color:rgb(0,110,45);
+}
+#ap-inc-exc-btn.exc{
+  background:rgba(239,83,80,0.10);border:1px solid rgba(239,83,80,0.4);color:rgb(180,30,30);
+}
+#ap-inc-exc-btn:hover{filter:brightness(0.93);}
 
 /* poll mode btn */
 #ap-poll-mode-btn{
   background:rgba(41,121,255,0.1);border:1px solid rgba(41,121,255,0.35);
   border-radius:8px;padding:3px 9px;font-size:10px;font-weight:600;
-  color:rgb(20,70,180);cursor:pointer;align-self:flex-start;
+  color:rgb(20,70,180);cursor:pointer;
 }
 #ap-poll-mode-btn:hover{background:rgba(41,121,255,0.2);}
 
-/* city panel */
-#ap-city-panel{
-  display:none;flex-direction:column;gap:0;
+/* location panel */
+#ap-loc-panel{
+  display:none;flex-direction:column;
   background:white;border:1px solid rgba(0,0,0,0.12);
   border-radius:12px;overflow:hidden;
   box-shadow:0 4px 20px rgba(0,0,0,0.15);
-  width:310px;max-height:320px;overflow-y:auto;
+  width:320px;max-height:320px;overflow-y:auto;
 }
-#ap-city-panel.open{display:flex;}
-#ap-city-search{
+#ap-loc-panel.open{display:flex;}
+#ap-loc-search-wrap{
   position:sticky;top:0;z-index:1;
   padding:8px 10px;border-bottom:1px solid rgba(0,0,0,0.08);background:white;
+  display:flex;flex-direction:column;gap:5px;
 }
-#ap-city-search input{
+#ap-loc-search-input{
   width:100%;box-sizing:border-box;
   border:1px solid rgba(0,0,0,0.15);border-radius:8px;
   padding:5px 10px;font-size:11px;font-family:inherit;outline:none;
   caret-color:#00c853;
 }
-.ap-province-label{
-  padding:5px 10px 3px;font-size:9px;font-weight:800;letter-spacing:0.08em;
-  text-transform:uppercase;color:rgb(140,140,140);background:rgb(248,248,248);
-  border-bottom:1px solid rgba(0,0,0,0.05);
-}
-.ap-city-item{
-  padding:7px 12px;font-size:11px;color:rgb(40,40,40);cursor:pointer;
-  display:flex;align-items:center;justify-content:space-between;
-  border-bottom:1px solid rgba(0,0,0,0.04);transition:background 0.1s;
-}
-.ap-city-item:hover{background:rgba(0,200,83,0.07);}
-.ap-city-item.selected{color:rgb(0,130,50);font-weight:600;}
-.ap-city-item.selected::after{content:'✓';font-size:11px;color:#00c853;}
-.ap-city-item.hidden{display:none;}
-
-/* job id row */
-#ap-jobid-row{display:none;align-items:center;gap:4px;}
-#ap-jobid-prefix{color:rgb(80,80,80);font-size:10px;font-weight:600;white-space:nowrap;}
-#ap-jobid-input{
-  background:rgba(255,255,255,0.6);border:1px solid rgba(0,0,0,0.15);
-  border-radius:8px;outline:none;padding:3px 8px;
-  font-size:10.5px;font-family:inherit;color:rgb(40,40,40);width:65px;
-}
-
-/* custom city input */
-#ap-custom-row{display:flex;gap:4px;margin-top:6px;}
+#ap-custom-row{display:flex;gap:4px;}
 #ap-custom-input{
   flex:1;border:1px solid rgba(0,0,0,0.15);border-radius:8px;
   padding:4px 8px;font-size:10.5px;font-family:inherit;outline:none;
@@ -199,6 +205,31 @@ function injectBadge() {
   color:rgb(0,110,45);cursor:pointer;white-space:nowrap;
 }
 #ap-custom-add:hover{background:rgba(0,200,83,0.3);}
+.ap-province-label{
+  padding:5px 10px 3px;font-size:9px;font-weight:800;letter-spacing:0.08em;
+  text-transform:uppercase;color:rgb(140,140,140);background:rgb(248,248,248);
+  border-bottom:1px solid rgba(0,0,0,0.05);
+}
+.ap-loc-item{
+  padding:7px 12px;font-size:11px;color:rgb(40,40,40);cursor:pointer;
+  display:flex;align-items:center;justify-content:space-between;
+  border-bottom:1px solid rgba(0,0,0,0.04);transition:background 0.1s;
+}
+.ap-loc-item:hover{background:rgba(0,200,83,0.07);}
+.ap-loc-item.selected.inc{color:rgb(0,130,50);font-weight:600;}
+.ap-loc-item.selected.inc::after{content:'✓';font-size:11px;color:#00c853;}
+.ap-loc-item.selected.exc{color:rgb(180,30,30);font-weight:600;}
+.ap-loc-item.selected.exc::after{content:'✕';font-size:11px;color:#ef5350;}
+.ap-loc-item.hidden{display:none;}
+
+/* job id row */
+#ap-jobid-row{display:none;align-items:center;gap:4px;}
+#ap-jobid-prefix{color:rgb(80,80,80);font-size:10px;font-weight:600;white-space:nowrap;}
+#ap-jobid-input{
+  background:rgba(255,255,255,0.6);border:1px solid rgba(0,0,0,0.15);
+  border-radius:8px;outline:none;padding:3px 8px;
+  font-size:10.5px;font-family:inherit;color:rgb(40,40,40);width:65px;
+}
 
 /* orb & replay */
 #ap-orb{
@@ -221,26 +252,28 @@ function injectBadge() {
   document.head.appendChild(style);
 
   const _isCA = window.location.hostname.includes('.ca');
-  const _pfx = _isCA ? 'JOB-CA-00000' : 'JOB-US-00000';
+  const _pfx  = _isCA ? 'JOB-CA-00000' : 'JOB-US-00000';
 
   // ── Build DOM ─────────────────────────────────────────────────────────────────
   const wrap = document.createElement('div'); wrap.id = 'ap-wrap';
 
-  // Main pill
   const pill = document.createElement('div'); pill.id = 'ap-pill';
   pill.innerHTML = `
     <span id="ap-dot"></span>
     <div id="ap-body">
       <span id="ap-label">Starting\u2026</span>
-      <span id="ap-version">v${AP_VERSION}</span> 
+      <span id="ap-version">v${AP_VERSION}</span>
       <span id="ap-stopwatch">00:00</span>
       <div id="ap-mode-row">
         <label id="ap-mode-toggle"><input type="checkbox" id="ap-mode-cb"/><span id="ap-mode-slider"></span></label>
         <span id="ap-mode-lbl">Poll Jobs</span>
       </div>
-      <div id="ap-chips-row"></div>
-      <button id="ap-city-toggle-btn">\u271a Cities</button>
-      <button id="ap-poll-mode-btn" title="Toggle polling mode">\u26a1 Interval</button>
+      <div id="ap-chips-row" data-empty-label="All locations"></div>
+      <div id="ap-loc-ctrl-row">
+        <button id="ap-loc-toggle-btn">\u271a Locations</button>
+        <button id="ap-inc-exc-btn" class="inc">Include</button>
+        <button id="ap-poll-mode-btn" title="Toggle polling mode">\uD83D\uDD17 Sequential</button>
+      </div>
       <div id="ap-jobid-row">
         <span id="ap-jobid-prefix">${_pfx}</span>
         <input id="ap-jobid-input" type="text" placeholder="12345"/>
@@ -250,103 +283,112 @@ function injectBadge() {
     <button id="ap-replay">\u27F3</button>
   `;
 
-  // City panel (separate element, below pill)
-  const panel = document.createElement('div'); panel.id = 'ap-city-panel';
+  // Location panel
+  const panel = document.createElement('div'); panel.id = 'ap-loc-panel';
   panel.innerHTML = `
-    <div id="ap-city-search">
-      <input id="ap-city-search-input" type="text" placeholder="Search city…" autocomplete="off" spellcheck="false"/>
+    <div id="ap-loc-search-wrap">
+      <input id="ap-loc-search-input" type="text" placeholder="Search location\u2026" autocomplete="off" spellcheck="false"/>
       <div id="ap-custom-row">
-        <input id="ap-custom-input" type="text" placeholder="Type custom city…" autocomplete="off" spellcheck="false"/>
+        <input id="ap-custom-input" type="text" placeholder="Custom location, e.g. Barrie, ON" autocomplete="off" spellcheck="false"/>
         <button id="ap-custom-add">+ Add</button>
       </div>
     </div>
-    <div id="ap-city-list"></div>
+    <div id="ap-loc-list"></div>
   `;
 
   wrap.appendChild(pill);
   wrap.appendChild(panel);
   document.body.appendChild(wrap);
-  badgeEl = pill;
+  badgeEl   = pill;
   startBtnEl = document.getElementById('ap-replay');
   startBtnEl.addEventListener('click', () => {
     if (typeof window.JS_TOGGLE_SCAN === 'function') window.JS_TOGGLE_SCAN();
   });
 
-  // ── City selector ─────────────────────────────────────────────────────────────
-  let _selected = [];
-  const chipsRow = document.getElementById('ap-chips-row');
-  const cityList = document.getElementById('ap-city-list');
-  const searchInput = document.getElementById('ap-city-search-input');
-  const toggleBtn = document.getElementById('ap-city-toggle-btn');
+  // ── State ─────────────────────────────────────────────────────────────────────
+  let _selected = [];   // array of location strings
+  let _locMode  = 'include'; // 'include' | 'exclude'
 
+  const chipsRow    = document.getElementById('ap-chips-row');
+  const locList     = document.getElementById('ap-loc-list');
+  const searchInput = document.getElementById('ap-loc-search-input');
+  const locToggleBtn = document.getElementById('ap-loc-toggle-btn');
+  const incExcBtn   = document.getElementById('ap-inc-exc-btn');
+
+  // ── Sync globals ──────────────────────────────────────────────────────────────
   function syncGlobals() {
-    window.JS_CITY_FILTERS = [..._selected];
-    window.JS_CITY_FILTER = _selected[0] || '';
-    storageSave(STORAGE_KEY_CITIES, _selected);
+    window.JS_LOC_FILTERS = [..._selected];
+    window.JS_LOC_MODE    = _locMode;
+    // legacy aliases (content.js filterJobs reads JS_CITY_FILTERS — we'll replace that too)
+    window.JS_CITY_FILTERS = [];
+    window.JS_CITY_FILTER  = '';
+    storageSave(STORAGE_KEY_LOCS,    _selected);
+    storageSave(STORAGE_KEY_LOCMODE, _locMode);
   }
 
+  // ── Chips ─────────────────────────────────────────────────────────────────────
   function renderChips() {
     chipsRow.innerHTML = '';
-    _selected.forEach(city => {
+    chipsRow.dataset.emptyLabel = _locMode === 'include' ? 'All locations' : 'No exclusions';
+    _selected.forEach(loc => {
       const chip = document.createElement('span');
-      chip.className = 'ap-chip';
-      chip.innerHTML = `${city}<span class="ap-chip-x" data-city="${city}">\u00d7</span>`;
+      chip.className = `ap-chip ${_locMode === 'include' ? 'inc' : 'exc'}`;
+      chip.innerHTML = `${loc}<span class="ap-chip-x" data-loc="${loc}">\u00d7</span>`;
       chip.querySelector('.ap-chip-x').addEventListener('click', (e) => {
         e.stopPropagation();
-        _selected = _selected.filter(c => c !== city);
-        renderChips(); updateCityList(); syncGlobals();
+        _selected = _selected.filter(l => l !== loc);
+        renderChips(); updateLocList(); syncGlobals();
       });
       chipsRow.appendChild(chip);
     });
   }
 
-  function buildCityList() {
-    cityList.innerHTML = '';
-    Object.entries(PROVINCE_GROUPS).forEach(([province, cities]) => {
+  // ── Location list ─────────────────────────────────────────────────────────────
+  function makeLocItem(loc) {
+    const item = document.createElement('div');
+    item.className = 'ap-loc-item';
+    item.textContent = loc;
+    item.dataset.loc = loc;
+    if (_selected.includes(loc)) item.classList.add('selected', _locMode);
+    item.addEventListener('click', () => {
+      if (_selected.includes(loc)) {
+        _selected = _selected.filter(l => l !== loc);
+        item.classList.remove('selected', 'inc', 'exc');
+      } else {
+        _selected.push(loc);
+        item.classList.add('selected', _locMode);
+      }
+      renderChips(); syncGlobals();
+    });
+    return item;
+  }
+
+  function buildLocList() {
+    locList.innerHTML = '';
+    Object.entries(PROVINCE_GROUPS).forEach(([province, locs]) => {
       const lbl = document.createElement('div');
       lbl.className = 'ap-province-label'; lbl.textContent = province;
-      cityList.appendChild(lbl);
-      cities.forEach(city => {
-        const item = document.createElement('div');
-        item.className = 'ap-city-item';
-        item.textContent = city;
-        item.dataset.city = city;
-        if (_selected.includes(city)) item.classList.add('selected');
-        item.addEventListener('click', () => {
-          if (_selected.includes(city)) {
-            _selected = _selected.filter(c => c !== city);
-            item.classList.remove('selected');
-          } else {
-            _selected.push(city);
-            item.classList.add('selected');
-          }
-          renderChips(); syncGlobals();
-        });
-        cityList.appendChild(item);
-      });
+      locList.appendChild(lbl);
+      locs.forEach(loc => locList.appendChild(makeLocItem(loc)));
     });
   }
 
-  function updateCityList() {
-    cityList.querySelectorAll('.ap-city-item').forEach(item => {
-      item.classList.toggle('selected', _selected.includes(item.dataset.city));
+  function updateLocList() {
+    locList.querySelectorAll('.ap-loc-item').forEach(item => {
+      const sel = _selected.includes(item.dataset.loc);
+      item.classList.toggle('selected', sel);
+      item.classList.toggle('inc', sel && _locMode === 'include');
+      item.classList.toggle('exc', sel && _locMode === 'exclude');
     });
   }
 
-  function filterCityList(q) {
+  function filterLocList(q) {
     const query = q.toLowerCase();
-    let lastProvince = null;
-    cityList.childNodes.forEach(node => {
-      if (node.classList?.contains('ap-province-label')) {
-        lastProvince = node; return;
-      }
-      if (node.classList?.contains('ap-city-item')) {
-        const match = !query || node.dataset.city.toLowerCase().includes(query);
-        node.classList.toggle('hidden', !match);
-      }
+    locList.querySelectorAll('.ap-loc-item').forEach(item => {
+      const match = !query || item.dataset.loc.toLowerCase().includes(query);
+      item.classList.toggle('hidden', !match);
     });
-    // hide province labels with no visible children
-    cityList.querySelectorAll('.ap-province-label').forEach(lbl => {
+    locList.querySelectorAll('.ap-province-label').forEach(lbl => {
       let sib = lbl.nextSibling; let anyVisible = false;
       while (sib && !sib.classList?.contains('ap-province-label')) {
         if (!sib.classList?.contains('hidden')) anyVisible = true;
@@ -356,58 +398,50 @@ function injectBadge() {
     });
   }
 
-  // Poll mode toggle button
-  const pollModeBtn = document.getElementById('ap-poll-mode-btn');
-  if (pollModeBtn) {
-    // Init label from saved state
-    const saved = localStorage.getItem('ap_poll_mode') || 'sequential';
-    pollModeBtn.textContent = saved === 'interval' ? '\u26a1 Interval' : '\uD83D\uDD17 Sequential';
-    pollModeBtn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      if (typeof window.JS_TOGGLE_POLL_MODE === 'function') window.JS_TOGGLE_POLL_MODE();
-      // update label
-      const mode = localStorage.getItem('ap_poll_mode') || 'interval';
-      pollModeBtn.textContent = mode === 'interval' ? '\u26a1 Interval' : '\uD83D\uDD17 Sequential';
-    });
+  // ── Include / Exclude toggle ──────────────────────────────────────────────────
+  function applyLocMode(mode) {
+    _locMode = mode;
+    incExcBtn.textContent = mode === 'include' ? 'Include' : 'Exclude';
+    incExcBtn.className   = mode === 'include' ? 'inc' : 'exc';
+    // re-style button id
+    incExcBtn.id = 'ap-inc-exc-btn';
+    chipsRow.dataset.emptyLabel = mode === 'include' ? 'All locations' : 'No exclusions';
+    renderChips();
+    updateLocList();
+    syncGlobals();
   }
 
-  toggleBtn.addEventListener('click', (e) => {
+  incExcBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    applyLocMode(_locMode === 'include' ? 'exclude' : 'include');
+  });
+
+  // ── Panel open/close ──────────────────────────────────────────────────────────
+  locToggleBtn.addEventListener('click', (e) => {
     e.stopPropagation();
     panel.classList.toggle('open');
     if (panel.classList.contains('open')) searchInput.focus();
   });
 
-  searchInput.addEventListener('input', () => filterCityList(searchInput.value));
+  searchInput.addEventListener('input', () => filterLocList(searchInput.value));
 
   document.addEventListener('click', (e) => {
-    if (!panel.contains(e.target) && e.target !== toggleBtn) {
+    if (!panel.contains(e.target) && e.target !== locToggleBtn) {
       panel.classList.remove('open');
     }
   });
 
-  // Custom city add
+  // ── Custom location add ───────────────────────────────────────────────────────
   const customInput = document.getElementById('ap-custom-input');
-  const customAdd = document.getElementById('ap-custom-add');
-  function addCustomCity() {
-    const city = customInput.value.trim();
-    if (!city || _selected.includes(city)) { customInput.value = ''; return; }
-    _selected.push(city);
-    // add to list UI dynamically
-    const item = document.createElement('div');
-    item.className = 'ap-city-item selected';
-    item.textContent = city;
-    item.dataset.city = city;
-    item.addEventListener('click', () => {
-      if (_selected.includes(city)) {
-        _selected = _selected.filter(c => c !== city);
-        item.classList.remove('selected');
-      } else {
-        _selected.push(city);
-        item.classList.add('selected');
-      }
-      renderChips(); syncGlobals();
-    });
-    // insert under a "Custom" label (create once)
+  const customAdd   = document.getElementById('ap-custom-add');
+
+  function addCustomLoc() {
+    const loc = customInput.value.trim();
+    if (!loc || _selected.includes(loc)) { customInput.value = ''; return; }
+    _selected.push(loc);
+    // add to list UI
+    const item = makeLocItem(loc);
+    item.classList.add('selected', _locMode);
     let customGroup = document.getElementById('ap-custom-group');
     if (!customGroup) {
       customGroup = document.createElement('div');
@@ -415,25 +449,42 @@ function injectBadge() {
       const lbl = document.createElement('div');
       lbl.className = 'ap-province-label'; lbl.textContent = 'Custom';
       customGroup.appendChild(lbl);
-      cityList.appendChild(customGroup);
+      locList.appendChild(customGroup);
     }
     customGroup.appendChild(item);
     renderChips(); syncGlobals();
     customInput.value = '';
   }
-  customAdd.addEventListener('click', addCustomCity);
-  customInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); addCustomCity(); } });
+  customAdd.addEventListener('click', addCustomLoc);
+  customInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); addCustomLoc(); } });
 
-  // Load saved cities, then build list
-  storageLoad(STORAGE_KEY_CITIES, (saved) => {
+  // ── Load saved state ──────────────────────────────────────────────────────────
+  storageLoad(STORAGE_KEY_LOCMODE, (saved) => {
+    _locMode = (saved === 'exclude') ? 'exclude' : 'include';
+    applyLocMode(_locMode);
+  });
+  storageLoad(STORAGE_KEY_LOCS, (saved) => {
     _selected = Array.isArray(saved) ? saved : [];
-    buildCityList();
+    buildLocList();
     renderChips();
     syncGlobals();
   });
 
+  // ── Poll mode button ──────────────────────────────────────────────────────────
+  const pollModeBtn = document.getElementById('ap-poll-mode-btn');
+  if (pollModeBtn) {
+    const saved = localStorage.getItem('ap_poll_mode') || 'sequential';
+    pollModeBtn.textContent = saved === 'interval' ? '\u26a1 Interval' : '\uD83D\uDD17 Sequential';
+    pollModeBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (typeof window.JS_TOGGLE_POLL_MODE === 'function') window.JS_TOGGLE_POLL_MODE();
+      const mode = localStorage.getItem('ap_poll_mode') || 'sequential';
+      pollModeBtn.textContent = mode === 'interval' ? '\u26a1 Interval' : '\uD83D\uDD17 Sequential';
+    });
+  }
+
   // ── Job ID ────────────────────────────────────────────────────────────────────
-  const jobidRow = document.getElementById('ap-jobid-row');
+  const jobidRow   = document.getElementById('ap-jobid-row');
   const jobidInput = document.getElementById('ap-jobid-input');
   jobidInput.addEventListener('input', () => {
     const d = jobidInput.value.replace(/\D/g, '');
@@ -445,15 +496,15 @@ function injectBadge() {
     if (saved) { jobidInput.value = saved; window.JS_JOB_ID = _pfx + saved; }
   });
 
-  // ── Mode toggle ───────────────────────────────────────────────────────────────
-  const modeCb = document.getElementById('ap-mode-cb');
-  const modeLbl = document.getElementById('ap-mode-lbl');
-  const citySection = [chipsRow, toggleBtn];
+  // ── Scan mode toggle (Jobs / Schedules) ───────────────────────────────────────
+  const modeCb      = document.getElementById('ap-mode-cb');
+  const modeLbl     = document.getElementById('ap-mode-lbl');
+  const locSection  = [chipsRow, document.getElementById('ap-loc-ctrl-row')];
 
   function applyMode(isSchedule) {
     window.JS_MODE = isSchedule ? 'schedules' : 'jobs';
     modeLbl.textContent = isSchedule ? 'Poll Schedules' : 'Poll Jobs';
-    citySection.forEach(el => el.style.display = isSchedule ? 'none' : '');
+    locSection.forEach(el => el.style.display = isSchedule ? 'none' : '');
     jobidRow.style.display = isSchedule ? 'flex' : 'none';
     if (!isSchedule) panel.classList.remove('open');
     storageSave(STORAGE_KEY_MODE, window.JS_MODE);
@@ -463,7 +514,6 @@ function injectBadge() {
     applyMode(modeCb.checked);
     if (typeof window.JS_ON_MODE_CHANGE === 'function') window.JS_ON_MODE_CHANGE();
   });
-
   storageLoad(STORAGE_KEY_MODE, (saved) => {
     const isSched = saved === 'schedules';
     modeCb.checked = isSched; applyMode(isSched);
@@ -501,7 +551,7 @@ function setStatus(key) {
   lbl.textContent = cfg.label;
   if (orb) {
     orb.style.background = `linear-gradient(135deg,${cfg.color}cc,${cfg.color})`;
-    orb.style.boxShadow = `inset 0 1px 0 rgba(255,255,255,0.4),0 3px 10px ${cfg.color}55`;
+    orb.style.boxShadow  = `inset 0 1px 0 rgba(255,255,255,0.4),0 3px 10px ${cfg.color}55`;
     const d = orb.querySelector('.ap-orb-dot');
     if (d) d.style.animationPlayState = cfg.pulse ? 'running' : 'paused';
   }
@@ -521,7 +571,7 @@ function setStatus(key) {
         g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + d + 0.14);
         o.start(ctx.currentTime + d); o.stop(ctx.currentTime + d + 0.18);
       });
-    } catch (e) { }
+    } catch (e) {}
   }
   if (key === 'APPLIED') {
     if (orb) orb.style.display = 'none';
@@ -532,7 +582,7 @@ function setStatus(key) {
   }
 }
 
-function setScanButtonState(_) { }
+function setScanButtonState(_) {}
 
 function resetForRescan() {
   sessionStorage.removeItem('js_applied');

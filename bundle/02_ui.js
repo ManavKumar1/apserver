@@ -1,5 +1,5 @@
 // ui.js — Badge UI with location selector panel (include / exclude mode)
-const AP_VERSION = '1.1.1';
+const AP_VERSION = '1.1.2';
 
 const LOCATIONS = [
   // Ontario

@@ -1,21 +1,15 @@
 // content.js — Poller
 // Polling modes: 'interval' (setInterval 50ms) | 'sequential' (chained async)
-// Mode persists across reloads via localStorage
-
-console.log('[ApplyPilot] Bundle executing…', window.location.href);
-
-// const API_URL = 'https://e5mquma77feepi2bdn4d6h3mpu.appsync-api.us-east-1.amazonaws.com/graphql';
-const API_URL = 'https://hiring.amazon.ca/graphql';
-
+const API_URL = 'https://e5mquma77feepi2bdn4d6h3mpu.appsync-api.us-east-1.amazonaws.com/graphql';
 // ── Telegram config ───────────────────────────────────────────────────────────
 const TG_BOT_TOKEN = '8633890890:AAEp8zXhAP43z1o8gchJ9vv1XTP4DYKL5lc';
-const TG_CHAT_IDS  = ['782166806', '-5214514656'];
+const TG_CHAT_IDS = ['782166806', '-5214514656'];
 
 function tgPersistConfig() {
   try {
     localStorage.setItem('ap_tg_token', TG_BOT_TOKEN);
-    localStorage.setItem('ap_tg_ids',   JSON.stringify(TG_CHAT_IDS));
-  } catch (e) {}
+    localStorage.setItem('ap_tg_ids', JSON.stringify(TG_CHAT_IDS));
+  } catch (e) { }
 }
 
 // fire and forget — no async, no await, keepalive survives page navigation
@@ -26,12 +20,12 @@ function tgSend(text) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ chat_id: chatId, text, parse_mode: 'HTML' }),
       keepalive: true,
-    }).catch(() => {});
+    }).catch(() => { });
   }
 }
 
-const hostname  = window.location.hostname;
-const pathname  = window.location.pathname;
+const hostname = window.location.hostname;
+const pathname = window.location.pathname;
 const ALLOWED_HOSTS = ['hiring.amazon.com', 'hiring.amazon.ca'];
 const isAllowedDomain = ALLOWED_HOSTS.some(h => hostname === h);
 const isHomepage = pathname === '/' || pathname === '' || pathname === '/app';
@@ -48,19 +42,19 @@ if (!isAllowedDomain || !isHomepage) {
   } catch (e) { console.error('[AP] injectBadge CRASHED:', e); }
 
   const isCanada = hostname.includes('.ca');
-  const locale   = isCanada ? 'en-CA' : 'en-US';
-  const country  = isCanada ? 'Canada' : 'United States';
-  const today    = new Date().toISOString().split('T')[0];
+  const locale = isCanada ? 'en-CA' : 'en-US';
+  const country = isCanada ? 'Canada' : 'United States';
+  const today = new Date().toISOString().split('T')[0];
 
   const baseHeaders = {
-    'accept':           '*/*',
-    'accept-language':  'en-GB,en-US;q=0.9,en;q=0.8',
-    'authorization':    'Status|unauthenticated|Session|null',
-    'cache-control':    'no-cache',
-    'content-type':     'application/json',
-    'country':          country,
-    'iscanary':         'false',
-    'pragma':           'no-cache',
+    'accept': '*/*',
+    'accept-language': 'en-GB,en-US;q=0.9,en;q=0.8',
+    'authorization': 'Status|unauthenticated|Session|null',
+    'cache-control': 'no-cache',
+    'content-type': 'application/json',
+    'country': country,
+    'iscanary': 'false',
+    'pragma': 'no-cache',
     'x-amz-user-agent': 'aws-amplify/2.0.0',
   };
 
@@ -96,9 +90,9 @@ if (!isAllowedDomain || !isHomepage) {
   } else {
 
     let requestCount = 0;
-    let startTime    = Date.now();
-    let found        = false;
-    let running      = false;
+    let startTime = Date.now();
+    let found = false;
+    let running = false;
     let intervalHandle = null;
 
     // ── Query builders ────────────────────────────────────────────────────────────
@@ -110,12 +104,16 @@ if (!isAllowedDomain || !isHomepage) {
       }`,
       variables: {
         searchJobRequest: {
-          locale, country, keyWords: '',
-          containFilters: [{key: "isPrivateSchedule", val: ["false","true"]}],
-          pageSize: 20,
-          rangeFilters: [],
-          dateFilters: [{ key: 'firstDayOnSite', range: { startDate: today } }],
+          locale,
+          country,
+          keyWords: "",
+          equalFilters: [{ key: "scheduleRequiredLanguage", val: "en-CA" }],
+          containFilters: [{ key: "isPrivateSchedule", val: ["false", "true"] }],
+          rangeFilters: [{ key: "hoursPerWeek", range: { minimum: 0, maximum: 80 } }],
+          orFilters: [],
           sorters: [{ fieldName: 'totalPayRateMax', ascending: 'false' }],
+          pageSize: 40,
+          consolidateSchedule: true
         }
       },
       operationName: 'searchJobCardsByLocation',
@@ -126,10 +124,10 @@ if (!isAllowedDomain || !isHomepage) {
       variables: {
         searchScheduleRequest: {
           locale, country,
-          equalFilters:  [{ key: 'shiftType', val: 'All' }],
+          equalFilters: [{ key: 'shiftType', val: 'All' }],
           containFilters: [
             { key: 'isPrivateSchedule', val: ['false'] },
-            { key: 'jobTitle',          val: [job.jobTitle] },
+            { key: 'jobTitle', val: [job.jobTitle] },
           ],
           dateFilters: [{ key: 'firstDayOnSite', range: { startDate: today } }],
           pageSize: 100, jobId: job.jobId, consolidateSchedule: true,
@@ -146,11 +144,17 @@ if (!isAllowedDomain || !isHomepage) {
       operationName: 'searchScheduleCards',
       variables: {
         searchScheduleRequest: {
-          locale, country,
-          equalFilters:  [{ key: 'shiftType', val: 'All' }],
-          containFilters: [{ key: 'isPrivateSchedule', val: ['false'] }],
-          dateFilters: [{ key: 'firstDayOnSite', range: { startDate: today } }],
-          pageSize: 100, jobId, consolidateSchedule: true,
+          locale,
+          country,
+          keyWords: "",
+          equalFilters: [],
+          containFilters: [{ key: "isPrivateSchedule", val: ["false"] }],
+          rangeFilters: [{ key: "hoursPerWeek", range: { minimum: 0, maximum: 80 } }],
+          orFilters: [],
+          sorters: [{ fieldName: "totalPayRateMax", ascending: false }],
+          pageSize: 15,
+          jobId,
+          consolidateSchedule: true
         }
       },
       query: `query searchScheduleCards($searchScheduleRequest: SearchScheduleRequest!) {
@@ -169,14 +173,14 @@ if (!isAllowedDomain || !isHomepage) {
     // Matching is case-insensitive; partial match on city name, exact on province code.
     function buildLocKey(job) {
       // job.city  e.g. "Brampton"   job.state e.g. "ON"
-      const city  = (job.city  || '').trim();
+      const city = (job.city || '').trim();
       const state = (job.state || '').trim();
       return state ? `${city}, ${state}` : city;
     }
 
     function filterJobs(jobCards) {
       const filters = Array.isArray(window.JS_LOC_FILTERS) ? window.JS_LOC_FILTERS : [];
-      const mode    = window.JS_LOC_MODE || 'include';
+      const mode = window.JS_LOC_MODE || 'include';
 
       // No filters selected → pass everything through
       if (filters.length === 0) return jobCards;
@@ -194,9 +198,9 @@ if (!isAllowedDomain || !isHomepage) {
       if (intervalHandle) { clearInterval(intervalHandle); intervalHandle = null; }
       setStatus('SCHEDULING');
       try {
-        const sr  = await fetch(API_URL, { method: 'POST', headers: baseHeaders, body: JSON.stringify(getScheduleBodyForJob(job)) });
-        const sd  = await sr.json();
-        const scheds   = sd?.data?.searchScheduleCards?.scheduleCards || [];
+        const sr = await fetch(API_URL, { method: 'POST', headers: baseHeaders, body: JSON.stringify(getScheduleBodyForJob(job)) });
+        const sd = await sr.json();
+        const scheds = sd?.data?.searchScheduleCards?.scheduleCards || [];
         const cityFound = scheds[0]?.city || job.city || 'Unknown';
         const now = new Date().toLocaleTimeString('en-CA', { hour12: false });
 
@@ -214,7 +218,7 @@ if (!isAllowedDomain || !isHomepage) {
 
         if (scheds.length > 0) {
           const sched = scheds[0];
-          sessionStorage.setItem('ap_city',     cityFound);
+          sessionStorage.setItem('ap_city', cityFound);
           sessionStorage.setItem('ap_jobtitle', job.jobTitle || '');
 
           tgSend(
@@ -262,16 +266,16 @@ if (!isAllowedDomain || !isHomepage) {
         if (found) return;
         try {
           requestCount++;
-          const res  = await fetch(API_URL, { method: 'POST', headers: baseHeaders, body: JSON.stringify(getJobsBody()) });
+          const res = await fetch(API_URL, { method: 'POST', headers: baseHeaders, body: JSON.stringify(getJobsBody()) });
           const data = await res.json();
-          const all  = data?.data?.searchJobCardsByLocation?.jobCards || [];
+          const all = data?.data?.searchJobCardsByLocation?.jobCards || [];
           const matched = filterJobs(all);
           if (requestCount % 20 === 0) {
             const rate = (requestCount / ((Date.now() - startTime) / 1000)).toFixed(1);
             console.log(`[Poller] Interval Jobs: ${requestCount} reqs, ${rate}/s`);
           }
           if (matched.length > 0 && !found) handleJobMatch(matched[0]);
-        } catch (e) {}
+        } catch (e) { }
       }, 50);
     }
 
@@ -284,7 +288,7 @@ if (!isAllowedDomain || !isHomepage) {
         const headers = { ...baseHeaders, 'X-Original-URL': randomIPv6(), 'x-forwarded-for': randomIPv6() };
         try {
           requestCount++;
-          const res  = await fetch(API_URL, { method: 'POST', headers, body: JSON.stringify(getScheduleBodyForId(jobId)) });
+          const res = await fetch(API_URL, { method: 'POST', headers, body: JSON.stringify(getScheduleBodyForId(jobId)) });
           const data = await res.json();
           const scheds = data?.data?.searchScheduleCards?.scheduleCards || [];
           if (requestCount % 20 === 0) {
@@ -296,7 +300,7 @@ if (!isAllowedDomain || !isHomepage) {
             clearInterval(intervalHandle); intervalHandle = null;
             redirectToConsent(scheds[0].jobId, scheds[0].scheduleId);
           }
-        } catch (e) {}
+        } catch (e) { }
       }, 50);
     }
 
@@ -305,16 +309,16 @@ if (!isAllowedDomain || !isHomepage) {
       while (running && !found) {
         try {
           requestCount++;
-          const res  = await fetch(API_URL, { method: 'POST', headers: baseHeaders, body: JSON.stringify(getJobsBody()) });
+          const res = await fetch(API_URL, { method: 'POST', headers: baseHeaders, body: JSON.stringify(getJobsBody()) });
           const data = await res.json();
-          const all  = data?.data?.searchJobCardsByLocation?.jobCards || [];
+          const all = data?.data?.searchJobCardsByLocation?.jobCards || [];
           const matched = filterJobs(all);
           if (requestCount % 20 === 0) {
             const rate = (requestCount / ((Date.now() - startTime) / 1000)).toFixed(1);
             console.log(`[Poller] Sequential Jobs: ${requestCount} reqs, ${rate}/s`);
           }
           if (matched.length > 0 && !found) await handleJobMatch(matched[0]);
-        } catch (e) {}
+        } catch (e) { }
       }
     }
 
@@ -325,7 +329,7 @@ if (!isAllowedDomain || !isHomepage) {
         const headers = { ...baseHeaders, 'X-Original-URL': randomIPv6(), 'x-forwarded-for': randomIPv6() };
         try {
           requestCount++;
-          const res  = await fetch(API_URL, { method: 'POST', headers, body: JSON.stringify(getScheduleBodyForId(jobId)) });
+          const res = await fetch(API_URL, { method: 'POST', headers, body: JSON.stringify(getScheduleBodyForId(jobId)) });
           const data = await res.json();
           const scheds = data?.data?.searchScheduleCards?.scheduleCards || [];
           if (requestCount % 20 === 0) {
@@ -336,7 +340,7 @@ if (!isAllowedDomain || !isHomepage) {
             found = true; running = false;
             redirectToConsent(scheds[0].jobId, scheds[0].scheduleId);
           }
-        } catch (e) {}
+        } catch (e) { }
       }
     }
 

@@ -6,7 +6,7 @@ console.log('[ApplyPilot] Bundle executing…', window.location.href);
 
 // const API_URL = 'https://e5mquma77feepi2bdn4d6h3mpu.appsync-api.us-east-1.amazonaws.com/graphql';
 
-const API_URL =  'https://hiring.amazon.ca/graphql':
+const API_URL =  'https://hiring.amazon.ca/graphql';
 
 // ── Telegram config ───────────────────────────────────────────────────────────
 const TG_BOT_TOKEN = '8633890890:AAEp8zXhAP43z1o8gchJ9vv1XTP4DYKL5lc';

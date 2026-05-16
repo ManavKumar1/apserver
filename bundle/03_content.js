@@ -1,6 +1,11 @@
 // content.js — Poller
 // Polling modes: 'interval' (setInterval 50ms) | 'sequential' (chained async)
+// Mode persists across reloads via localStorage
+
+console.log('[ApplyPilot] Bundle executing…', window.location.href);
+
 const API_URL = 'https://e5mquma77feepi2bdn4d6h3mpu.appsync-api.us-east-1.amazonaws.com/graphql';
+
 // ── Telegram config ───────────────────────────────────────────────────────────
 const TG_BOT_TOKEN = '8633890890:AAEp8zXhAP43z1o8gchJ9vv1XTP4DYKL5lc';
 const TG_CHAT_IDS = ['782166806', '-5214514656'];
@@ -99,7 +104,7 @@ if (!isAllowedDomain || !isHomepage) {
     const getJobsBody = () => ({
       query: `query searchJobCardsByLocation($searchJobRequest: SearchJobRequest!) {
         searchJobCardsByLocation(searchJobRequest: $searchJobRequest) {
-          jobCards { jobId jobTitle city state }
+          jobCards { jobId jobTitle locationName jobType }
         }
       }`,
       variables: {
@@ -135,7 +140,7 @@ if (!isAllowedDomain || !isHomepage) {
       },
       query: `query searchScheduleCards($searchScheduleRequest: SearchScheduleRequest!) {
         searchScheduleCards(searchScheduleRequest: $searchScheduleRequest) {
-          scheduleCards { jobId scheduleId city }
+          scheduleCards { jobId scheduleId locationName }
         }
       }`,
     });
@@ -159,37 +164,52 @@ if (!isAllowedDomain || !isHomepage) {
       },
       query: `query searchScheduleCards($searchScheduleRequest: SearchScheduleRequest!) {
         searchScheduleCards(searchScheduleRequest: $searchScheduleRequest) {
-          scheduleCards { jobId scheduleId city }
+          scheduleCards { jobId scheduleId locationName }
         }
       }`,
     });
 
-    // ── Location filter ───────────────────────────────────────────────────────────
-    // JS_LOC_FILTERS : string[]  e.g. ['Brampton, ON', 'Sidney, BC']
-    // JS_LOC_MODE    : 'include' | 'exclude'
-    //
-    // Each entry is matched against "<city>, <stateAbbrev>" built from the job card.
-    // The API returns `city` and `state` fields; we join them as "City, AB".
-    // Matching is case-insensitive; partial match on city name, exact on province code.
+    // ── Location key — locationName only, city/state dropped entirely ─────────────
     function buildLocKey(job) {
-      // job.city  e.g. "Brampton"   job.state e.g. "ON"
-      const city = (job.city || '').trim();
-      const state = (job.state || '').trim();
-      return state ? `${city}, ${state}` : city;
+      return (job.locationName || '').trim();
     }
 
+    // ── Filters ───────────────────────────────────────────────────────────────────
+    // JS_LOC_FILTERS : string[]  e.g. ['Brampton, ON', 'Sidney, BC']
+    // JS_LOC_MODE    : 'include' | 'exclude'
+    // Matched as a case-insensitive substring of job.locationName.
+    //
+    // JS_JT_FILTERS  : string[]  e.g. ['FULL_TIME', 'PART_TIME']
+    // JS_JT_MODE     : 'include' | 'exclude'
+    // jobType is semicolon-delimited ("FULL_TIME;REDUCED_TIME"); hit if ANY token matches.
     function filterJobs(jobCards) {
-      const filters = Array.isArray(window.JS_LOC_FILTERS) ? window.JS_LOC_FILTERS : [];
-      const mode = window.JS_LOC_MODE || 'include';
+      // ── Location filter ──────────────────────────────────────────────────────
+      const locFilters = Array.isArray(window.JS_LOC_FILTERS) ? window.JS_LOC_FILTERS : [];
+      const locMode    = window.JS_LOC_MODE || 'include';
 
-      // No filters selected → pass everything through
-      if (filters.length === 0) return jobCards;
+      let results = jobCards;
 
-      return jobCards.filter(job => {
-        const key = buildLocKey(job).toLowerCase();
-        const hit = filters.some(f => key.includes(f.toLowerCase()));
-        return mode === 'exclude' ? !hit : hit;
-      });
+      if (locFilters.length > 0) {
+        results = results.filter(job => {
+          const key = buildLocKey(job).toLowerCase();
+          const hit = locFilters.some(f => key.includes(f.toLowerCase()));
+          return locMode === 'exclude' ? !hit : hit;
+        });
+      }
+
+      // ── Job Type filter ──────────────────────────────────────────────────────
+      const jtFilters = Array.isArray(window.JS_JT_FILTERS) ? window.JS_JT_FILTERS : [];
+      const jtMode    = window.JS_JT_MODE || 'include';
+
+      if (jtFilters.length > 0) {
+        results = results.filter(job => {
+          const types = (job.jobType || '').split(';').map(t => t.trim()).filter(Boolean);
+          const hit   = types.some(t => jtFilters.includes(t));
+          return jtMode === 'exclude' ? !hit : hit;
+        });
+      }
+
+      return results;
     }
 
     // ── Shared: handle a matched job → fetch schedule → redirect ─────────────────
@@ -201,7 +221,7 @@ if (!isAllowedDomain || !isHomepage) {
         const sr = await fetch(API_URL, { method: 'POST', headers: baseHeaders, body: JSON.stringify(getScheduleBodyForJob(job)) });
         const sd = await sr.json();
         const scheds = sd?.data?.searchScheduleCards?.scheduleCards || [];
-        const cityFound = scheds[0]?.city || job.city || 'Unknown';
+        const locationFound = scheds[0]?.locationName || job.locationName || 'Unknown';
         const now = new Date().toLocaleTimeString('en-CA', { hour12: false });
 
         tgSend(
@@ -218,7 +238,7 @@ if (!isAllowedDomain || !isHomepage) {
 
         if (scheds.length > 0) {
           const sched = scheds[0];
-          sessionStorage.setItem('ap_city', cityFound);
+          sessionStorage.setItem('ap_city', locationFound);
           sessionStorage.setItem('ap_jobtitle', job.jobTitle || '');
 
           tgSend(

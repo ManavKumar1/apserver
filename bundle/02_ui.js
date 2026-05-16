@@ -1,5 +1,5 @@
-// ui.js — Badge UI with location selector panel (include / exclude mode)
-const AP_VERSION = '1.1.2';
+// ui.js — Badge UI with location + job type selector panels
+const AP_VERSION = '1.0.3';
 
 const LOCATIONS = [
   // Ontario
@@ -26,32 +26,45 @@ const PROVINCE_GROUPS = {
   'Manitoba': LOCATIONS.filter(l => l.endsWith(', MB')),
 };
 
-const STORAGE_KEY_LOCS = 'ap_selected_locs';
-const STORAGE_KEY_LOCMODE = 'ap_loc_mode';   // 'include' | 'exclude'
-const STORAGE_KEY_MODE = 'ap_mode';
-const STORAGE_KEY_JOBID = 'ap_job_id';
+// ── Job Type definitions ──────────────────────────────────────────────────────
+// Keys match what the API returns inside the semicolon-delimited jobType field.
+const JOB_TYPES = [
+  { key: 'FULL_TIME',    label: 'Full Time' },
+  { key: 'PART_TIME',    label: 'Part Time' },
+  { key: 'REDUCED_TIME', label: 'Reduced Time' },
+  { key: 'FLEX_TIME',    label: 'Flex Time' },
+];
+
+const STORAGE_KEY_LOCS      = 'ap_selected_locs';
+const STORAGE_KEY_LOCMODE   = 'ap_loc_mode';    // 'include' | 'exclude'
+const STORAGE_KEY_JOBTYPES  = 'ap_selected_job_types';
+const STORAGE_KEY_JTMODE    = 'ap_jt_mode';     // 'include' | 'exclude'
+const STORAGE_KEY_MODE      = 'ap_mode';
+const STORAGE_KEY_JOBID     = 'ap_job_id';
 
 const STATUS = {
-  SCANNING: { label: 'Scanning Jobs\u2026', color: '#00c853', pulse: true },
-  POLLING: { label: 'Polling Schedules\u2026', color: '#00c853', pulse: true },
-  SCHEDULING: { label: 'Fetching Schedule\u2026', color: '#ff9100', pulse: true },
-  APPLYING: { label: 'Creating Application\u2026', color: '#2979ff', pulse: true },
-  QUESTIONS: { label: 'Answering Questions\u2026', color: '#aa00ff', pulse: true },
-  APPLIED: { label: 'Job Applied \u2713', color: '#00897b', pulse: false },
-  IDLE: { label: 'Idle \u2014 Starting\u2026', color: '#9e9e9e', pulse: false },
-  STOPPED: { label: 'Restarting\u2026', color: '#ff9100', pulse: true },
-  NO_JOB_ID: { label: 'Enter a Job ID first', color: '#ef5350', pulse: false },
+  SCANNING:   { label: 'Scanning Jobs\u2026',         color: '#00c853', pulse: true  },
+  POLLING:    { label: 'Polling Schedules\u2026',     color: '#00c853', pulse: true  },
+  SCHEDULING: { label: 'Fetching Schedule\u2026',     color: '#ff9100', pulse: true  },
+  APPLYING:   { label: 'Creating Application\u2026',  color: '#2979ff', pulse: true  },
+  QUESTIONS:  { label: 'Answering Questions\u2026',   color: '#aa00ff', pulse: true  },
+  APPLIED:    { label: 'Job Applied \u2713',           color: '#00897b', pulse: false },
+  IDLE:       { label: 'Idle \u2014 Starting\u2026',  color: '#9e9e9e', pulse: false },
+  STOPPED:    { label: 'Restarting\u2026',            color: '#ff9100', pulse: true  },
+  NO_JOB_ID:  { label: 'Enter a Job ID first',        color: '#ef5350', pulse: false },
 };
 
 // Globals read by content.js
-window.JS_MODE = 'jobs';
-window.JS_LOC_FILTERS = [];   // selected location strings e.g. ['Brampton, ON']
-window.JS_LOC_MODE = 'include'; // 'include' | 'exclude'
-window.JS_JOB_ID = '';
+window.JS_MODE         = 'jobs';
+window.JS_LOC_FILTERS  = [];        // selected location strings
+window.JS_LOC_MODE     = 'include'; // 'include' | 'exclude'
+window.JS_JT_FILTERS   = [];        // selected job-type keys  e.g. ['FULL_TIME']
+window.JS_JT_MODE      = 'include'; // 'include' | 'exclude'
+window.JS_JOB_ID       = '';
 
-// Legacy aliases kept so content.js city-filter code still compiles harmlessly
+// Legacy aliases
 window.JS_CITY_FILTERS = [];
-window.JS_CITY_FILTER = '';
+window.JS_CITY_FILTER  = '';
 
 function storageSave(key, value) {
   try { localStorage.setItem(key, JSON.stringify(value)); } catch (e) { }
@@ -125,10 +138,10 @@ function injectBadge() {
 #ap-mode-cb:checked+#ap-mode-slider::before{transform:translateX(19px);}
 #ap-mode-lbl{color:rgb(60,60,60);font-size:10px;font-weight:700;letter-spacing:0.05em;text-transform:uppercase;}
 
-/* selected chips row */
-#ap-chips-row{display:flex;flex-wrap:wrap;gap:3px;min-height:14px;}
-#ap-chips-row:empty::before{
-  content: attr(data-empty-label);
+/* shared chips row */
+.ap-chips-row{display:flex;flex-wrap:wrap;gap:3px;min-height:14px;}
+.ap-chips-row:empty::before{
+  content:attr(data-empty-label);
   color:rgb(170,170,170);font-size:9.5px;font-style:italic;line-height:1.6;
 }
 .ap-chip{
@@ -141,29 +154,29 @@ function injectBadge() {
 .ap-chip-x{cursor:pointer;font-size:11px;opacity:0.5;margin-left:1px;}
 .ap-chip-x:hover{opacity:1;}
 
-/* location panel controls row */
-#ap-loc-ctrl-row{display:flex;align-items:center;gap:5px;flex-wrap:wrap;}
+/* shared ctrl row */
+.ap-ctrl-row{display:flex;align-items:center;gap:5px;flex-wrap:wrap;}
 
 /* location toggle btn */
-#ap-loc-toggle-btn{
+#ap-loc-toggle-btn,#ap-jt-toggle-btn{
   background:rgba(0,0,0,0.06);border:1px solid rgba(0,0,0,0.12);
   border-radius:8px;padding:3px 9px;font-size:10px;font-weight:600;
   color:rgb(60,60,60);cursor:pointer;
 }
-#ap-loc-toggle-btn:hover{background:rgba(0,0,0,0.1);}
+#ap-loc-toggle-btn:hover,#ap-jt-toggle-btn:hover{background:rgba(0,0,0,0.1);}
 
-/* include/exclude toggle */
-#ap-inc-exc-btn{
+/* include/exclude toggle — shared class .ap-inc-exc-btn */
+.ap-inc-exc-btn{
   border-radius:8px;padding:3px 9px;font-size:10px;font-weight:700;
   cursor:pointer;transition:background 0.2s,color 0.2s,border-color 0.2s;
 }
-#ap-inc-exc-btn.inc{
+.ap-inc-exc-btn.inc{
   background:rgba(0,200,83,0.12);border:1px solid rgba(0,200,83,0.4);color:rgb(0,110,45);
 }
-#ap-inc-exc-btn.exc{
+.ap-inc-exc-btn.exc{
   background:rgba(239,83,80,0.10);border:1px solid rgba(239,83,80,0.4);color:rgb(180,30,30);
 }
-#ap-inc-exc-btn:hover{filter:brightness(0.93);}
+.ap-inc-exc-btn:hover{filter:brightness(0.93);}
 
 /* poll mode btn */
 #ap-poll-mode-btn{
@@ -173,15 +186,18 @@ function injectBadge() {
 }
 #ap-poll-mode-btn:hover{background:rgba(41,121,255,0.2);}
 
-/* location panel */
-#ap-loc-panel{
+/* ── shared panel base ─────────────────────────────────────────────────────── */
+.ap-panel{
   display:none;flex-direction:column;
   background:white;border:1px solid rgba(0,0,0,0.12);
   border-radius:12px;overflow:hidden;
   box-shadow:0 4px 20px rgba(0,0,0,0.15);
-  width:320px;max-height:320px;overflow-y:auto;
+  width:320px;
 }
-#ap-loc-panel.open{display:flex;}
+.ap-panel.open{display:flex;}
+
+/* location panel */
+#ap-loc-panel{max-height:320px;overflow-y:auto;}
 #ap-loc-search-wrap{
   position:sticky;top:0;z-index:1;
   padding:8px 10px;border-bottom:1px solid rgba(0,0,0,0.08);background:white;
@@ -222,6 +238,24 @@ function injectBadge() {
 .ap-loc-item.selected.exc::after{content:'✕';font-size:11px;color:#ef5350;}
 .ap-loc-item.hidden{display:none;}
 
+/* ── job type panel ─────────────────────────────────────────────────────────── */
+#ap-jt-panel{padding:8px 10px;gap:4px;}
+.ap-jt-item{
+  padding:7px 12px;font-size:11px;color:rgb(40,40,40);cursor:pointer;
+  display:flex;align-items:center;justify-content:space-between;
+  border:1px solid rgba(0,0,0,0.07);border-radius:8px;transition:background 0.1s;
+}
+.ap-jt-item:hover{background:rgba(0,200,83,0.07);}
+.ap-jt-item.selected.inc{color:rgb(0,130,50);font-weight:600;background:rgba(0,200,83,0.08);border-color:rgba(0,200,83,0.3);}
+.ap-jt-item.selected.inc::after{content:'✓';font-size:11px;color:#00c853;}
+.ap-jt-item.selected.exc{color:rgb(180,30,30);font-weight:600;background:rgba(239,83,80,0.07);border-color:rgba(239,83,80,0.3);}
+.ap-jt-item.selected.exc::after{content:'✕';font-size:11px;color:#ef5350;}
+#ap-jt-select-all{
+  margin-top:2px;padding:4px 0;font-size:9.5px;font-weight:700;color:rgb(100,100,100);
+  text-align:center;cursor:pointer;letter-spacing:0.04em;
+}
+#ap-jt-select-all:hover{color:rgb(0,130,50);}
+
 /* job id row */
 #ap-jobid-row{display:none;align-items:center;gap:4px;}
 #ap-jobid-prefix{color:rgb(80,80,80);font-size:10px;font-weight:600;white-space:nowrap;}
@@ -252,7 +286,7 @@ function injectBadge() {
   document.head.appendChild(style);
 
   const _isCA = window.location.hostname.includes('.ca');
-  const _pfx = _isCA ? 'JOB-CA-00000' : 'JOB-US-00000';
+  const _pfx  = _isCA ? 'JOB-CA-00000' : 'JOB-US-00000';
 
   // ── Build DOM ─────────────────────────────────────────────────────────────────
   const wrap = document.createElement('div'); wrap.id = 'ap-wrap';
@@ -268,12 +302,22 @@ function injectBadge() {
         <label id="ap-mode-toggle"><input type="checkbox" id="ap-mode-cb"/><span id="ap-mode-slider"></span></label>
         <span id="ap-mode-lbl">Poll Jobs</span>
       </div>
-      <div id="ap-chips-row" data-empty-label="All locations"></div>
-      <div id="ap-loc-ctrl-row">
+
+      <!-- Location section -->
+      <div id="ap-loc-chips-row" class="ap-chips-row" data-empty-label="All locations"></div>
+      <div id="ap-loc-ctrl-row" class="ap-ctrl-row">
         <button id="ap-loc-toggle-btn">\u271a Locations</button>
-        <button id="ap-inc-exc-btn" class="inc">Include</button>
+        <button id="ap-loc-inc-exc-btn" class="ap-inc-exc-btn inc">Include</button>
         <button id="ap-poll-mode-btn" title="Toggle polling mode">\uD83D\uDD17 Sequential</button>
       </div>
+
+      <!-- Job Type section -->
+      <div id="ap-jt-chips-row" class="ap-chips-row" data-empty-label="All job types"></div>
+      <div id="ap-jt-ctrl-row" class="ap-ctrl-row">
+        <button id="ap-jt-toggle-btn">\u2714 Job Type</button>
+        <button id="ap-jt-inc-exc-btn" class="ap-inc-exc-btn inc">Include</button>
+      </div>
+
       <div id="ap-jobid-row">
         <span id="ap-jobid-prefix">${_pfx}</span>
         <input id="ap-jobid-input" type="text" placeholder="12345"/>
@@ -284,8 +328,10 @@ function injectBadge() {
   `;
 
   // Location panel
-  const panel = document.createElement('div'); panel.id = 'ap-loc-panel';
-  panel.innerHTML = `
+  const locPanel = document.createElement('div');
+  locPanel.id = 'ap-loc-panel';
+  locPanel.className = 'ap-panel';
+  locPanel.innerHTML = `
     <div id="ap-loc-search-wrap">
       <input id="ap-loc-search-input" type="text" placeholder="Search location\u2026" autocomplete="off" spellcheck="false"/>
       <div id="ap-custom-row">
@@ -296,70 +342,80 @@ function injectBadge() {
     <div id="ap-loc-list"></div>
   `;
 
+  // Job Type panel
+  const jtPanel = document.createElement('div');
+  jtPanel.id = 'ap-jt-panel';
+  jtPanel.className = 'ap-panel';
+  // items built dynamically below
+
   wrap.appendChild(pill);
-  wrap.appendChild(panel);
+  wrap.appendChild(locPanel);
+  wrap.appendChild(jtPanel);
   document.body.appendChild(wrap);
-  badgeEl = pill;
+  badgeEl    = pill;
   startBtnEl = document.getElementById('ap-replay');
   startBtnEl.addEventListener('click', () => {
     if (typeof window.JS_TOGGLE_SCAN === 'function') window.JS_TOGGLE_SCAN();
   });
 
-  // ── State ─────────────────────────────────────────────────────────────────────
-  let _selected = [];   // array of location strings
-  let _locMode = 'include'; // 'include' | 'exclude'
+  // ══════════════════════════════════════════════════════════════════════════════
+  //  LOCATION FILTER
+  // ══════════════════════════════════════════════════════════════════════════════
+  let _locSelected = [];
+  let _locMode     = 'include';
 
-  const chipsRow = document.getElementById('ap-chips-row');
-  const locList = document.getElementById('ap-loc-list');
-  const searchInput = document.getElementById('ap-loc-search-input');
-  const locToggleBtn = document.getElementById('ap-loc-toggle-btn');
-  const incExcBtn = document.getElementById('ap-inc-exc-btn');
+  const locChipsRow   = document.getElementById('ap-loc-chips-row');
+  const locList       = document.getElementById('ap-loc-list');
+  const locSearchInput = document.getElementById('ap-loc-search-input');
+  const locToggleBtn  = document.getElementById('ap-loc-toggle-btn');
+  const locIncExcBtn  = document.getElementById('ap-loc-inc-exc-btn');
 
-  // ── Sync globals ──────────────────────────────────────────────────────────────
   function syncGlobals() {
-    window.JS_LOC_FILTERS = [..._selected];
-    window.JS_LOC_MODE = _locMode;
-    // legacy aliases (content.js filterJobs reads JS_CITY_FILTERS — we'll replace that too)
+    window.JS_LOC_FILTERS = [..._locSelected];
+    window.JS_LOC_MODE    = _locMode;
+    window.JS_JT_FILTERS  = [..._jtSelected];
+    window.JS_JT_MODE     = _jtMode;
     window.JS_CITY_FILTERS = [];
-    window.JS_CITY_FILTER = '';
+    window.JS_CITY_FILTER  = '';
     if (_initializing) return;
-    storageSave(STORAGE_KEY_LOCS, _selected);
-    storageSave(STORAGE_KEY_LOCMODE, _locMode);
+    storageSave(STORAGE_KEY_LOCS,     _locSelected);
+    storageSave(STORAGE_KEY_LOCMODE,  _locMode);
+    storageSave(STORAGE_KEY_JOBTYPES, _jtSelected);
+    storageSave(STORAGE_KEY_JTMODE,   _jtMode);
   }
 
-  // ── Chips ─────────────────────────────────────────────────────────────────────
-  function renderChips() {
-    chipsRow.innerHTML = '';
-    chipsRow.dataset.emptyLabel = _locMode === 'include' ? 'All locations' : 'No exclusions';
-    _selected.forEach(loc => {
+  // chips
+  function renderLocChips() {
+    locChipsRow.innerHTML = '';
+    locChipsRow.dataset.emptyLabel = _locMode === 'include' ? 'All locations' : 'No exclusions';
+    _locSelected.forEach(loc => {
       const chip = document.createElement('span');
       chip.className = `ap-chip ${_locMode === 'include' ? 'inc' : 'exc'}`;
       chip.innerHTML = `${loc}<span class="ap-chip-x" data-loc="${loc}">\u00d7</span>`;
       chip.querySelector('.ap-chip-x').addEventListener('click', (e) => {
         e.stopPropagation();
-        _selected = _selected.filter(l => l !== loc);
-        renderChips(); updateLocList(); syncGlobals();
+        _locSelected = _locSelected.filter(l => l !== loc);
+        renderLocChips(); updateLocList(); syncGlobals();
       });
-      chipsRow.appendChild(chip);
+      locChipsRow.appendChild(chip);
     });
   }
 
-  // ── Location list ─────────────────────────────────────────────────────────────
   function makeLocItem(loc) {
     const item = document.createElement('div');
     item.className = 'ap-loc-item';
     item.textContent = loc;
     item.dataset.loc = loc;
-    if (_selected.includes(loc)) item.classList.add('selected', _locMode);
+    if (_locSelected.includes(loc)) item.classList.add('selected', _locMode);
     item.addEventListener('click', () => {
-      if (_selected.includes(loc)) {
-        _selected = _selected.filter(l => l !== loc);
+      if (_locSelected.includes(loc)) {
+        _locSelected = _locSelected.filter(l => l !== loc);
         item.classList.remove('selected', 'inc', 'exc');
       } else {
-        _selected.push(loc);
+        _locSelected.push(loc);
         item.classList.add('selected', _locMode);
       }
-      renderChips(); syncGlobals();
+      renderLocChips(); syncGlobals();
     });
     return item;
   }
@@ -376,7 +432,7 @@ function injectBadge() {
 
   function updateLocList() {
     locList.querySelectorAll('.ap-loc-item').forEach(item => {
-      const sel = _selected.includes(item.dataset.loc);
+      const sel = _locSelected.includes(item.dataset.loc);
       item.classList.toggle('selected', sel);
       item.classList.toggle('inc', sel && _locMode === 'include');
       item.classList.toggle('exc', sel && _locMode === 'exclude');
@@ -399,48 +455,37 @@ function injectBadge() {
     });
   }
 
-  // ── Include / Exclude toggle ──────────────────────────────────────────────────
   function applyLocMode(mode) {
     _locMode = mode;
-    incExcBtn.textContent = mode === 'include' ? 'Include' : 'Exclude';
-    incExcBtn.className = mode === 'include' ? 'inc' : 'exc';
-    // re-style button id
-    incExcBtn.id = 'ap-inc-exc-btn';
-    chipsRow.dataset.emptyLabel = mode === 'include' ? 'All locations' : 'No exclusions';
-    renderChips();
-    updateLocList();
-    syncGlobals();
+    locIncExcBtn.textContent = mode === 'include' ? 'Include' : 'Exclude';
+    locIncExcBtn.className   = `ap-inc-exc-btn ${mode === 'include' ? 'inc' : 'exc'}`;
+    locChipsRow.dataset.emptyLabel = mode === 'include' ? 'All locations' : 'No exclusions';
+    renderLocChips(); updateLocList(); syncGlobals();
   }
 
-  incExcBtn.addEventListener('click', (e) => {
+  locIncExcBtn.addEventListener('click', (e) => {
     e.stopPropagation();
     applyLocMode(_locMode === 'include' ? 'exclude' : 'include');
   });
 
-  // ── Panel open/close ──────────────────────────────────────────────────────────
   locToggleBtn.addEventListener('click', (e) => {
     e.stopPropagation();
-    panel.classList.toggle('open');
-    if (panel.classList.contains('open')) searchInput.focus();
+    const opening = !locPanel.classList.contains('open');
+    locPanel.classList.toggle('open');
+    jtPanel.classList.remove('open'); // close the other panel
+    if (opening) locSearchInput.focus();
   });
 
-  searchInput.addEventListener('input', () => filterLocList(searchInput.value));
+  locSearchInput.addEventListener('input', () => filterLocList(locSearchInput.value));
 
-  document.addEventListener('click', (e) => {
-    if (!panel.contains(e.target) && e.target !== locToggleBtn) {
-      panel.classList.remove('open');
-    }
-  });
-
-  // ── Custom location add ───────────────────────────────────────────────────────
+  // Custom location
   const customInput = document.getElementById('ap-custom-input');
-  const customAdd = document.getElementById('ap-custom-add');
+  const customAdd   = document.getElementById('ap-custom-add');
 
   function addCustomLoc() {
     const loc = customInput.value.trim();
-    if (!loc || _selected.includes(loc)) { customInput.value = ''; return; }
-    _selected.push(loc);
-    // add to list UI
+    if (!loc || _locSelected.includes(loc)) { customInput.value = ''; return; }
+    _locSelected.push(loc);
     const item = makeLocItem(loc);
     item.classList.add('selected', _locMode);
     let customGroup = document.getElementById('ap-custom-group');
@@ -453,24 +498,115 @@ function injectBadge() {
       locList.appendChild(customGroup);
     }
     customGroup.appendChild(item);
-    renderChips(); syncGlobals();
+    renderLocChips(); syncGlobals();
     customInput.value = '';
   }
   customAdd.addEventListener('click', addCustomLoc);
   customInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); addCustomLoc(); } });
 
-  let _initializing = true;
-  // ── Load saved state ──────────────────────────────────────────────────────────
-  storageLoad(STORAGE_KEY_LOCMODE, (saved) => {
-    _locMode = (saved === 'exclude') ? 'exclude' : 'include';
-    applyLocMode(_locMode);
+  // ══════════════════════════════════════════════════════════════════════════════
+  //  JOB TYPE FILTER
+  // ══════════════════════════════════════════════════════════════════════════════
+  let _jtSelected = [];
+  let _jtMode     = 'include';
+
+  const jtChipsRow  = document.getElementById('ap-jt-chips-row');
+  const jtToggleBtn = document.getElementById('ap-jt-toggle-btn');
+  const jtIncExcBtn = document.getElementById('ap-jt-inc-exc-btn');
+
+  function renderJtChips() {
+    jtChipsRow.innerHTML = '';
+    jtChipsRow.dataset.emptyLabel = _jtMode === 'include' ? 'All job types' : 'No exclusions';
+    _jtSelected.forEach(key => {
+      const def  = JOB_TYPES.find(t => t.key === key);
+      const label = def ? def.label : key;
+      const chip = document.createElement('span');
+      chip.className = `ap-chip ${_jtMode === 'include' ? 'inc' : 'exc'}`;
+      chip.innerHTML = `${label}<span class="ap-chip-x" data-key="${key}">\u00d7</span>`;
+      chip.querySelector('.ap-chip-x').addEventListener('click', (e) => {
+        e.stopPropagation();
+        _jtSelected = _jtSelected.filter(k => k !== key);
+        renderJtChips(); updateJtList(); syncGlobals();
+      });
+      jtChipsRow.appendChild(chip);
+    });
+  }
+
+  function buildJtList() {
+    jtPanel.innerHTML = '';  // clear first
+    JOB_TYPES.forEach(({ key, label }) => {
+      const item = document.createElement('div');
+      item.className = 'ap-jt-item';
+      item.textContent = label;
+      item.dataset.key = key;
+      if (_jtSelected.includes(key)) item.classList.add('selected', _jtMode);
+      item.addEventListener('click', () => {
+        if (_jtSelected.includes(key)) {
+          _jtSelected = _jtSelected.filter(k => k !== key);
+          item.classList.remove('selected', 'inc', 'exc');
+        } else {
+          _jtSelected.push(key);
+          item.classList.add('selected', _jtMode);
+        }
+        renderJtChips(); syncGlobals();
+      });
+      jtPanel.appendChild(item);
+    });
+    // Select All / Clear All
+    const selectAll = document.createElement('div');
+    selectAll.id = 'ap-jt-select-all';
+    selectAll.textContent = 'Select All';
+    selectAll.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const allKeys = JOB_TYPES.map(t => t.key);
+      if (_jtSelected.length === allKeys.length) {
+        // clear
+        _jtSelected = [];
+        selectAll.textContent = 'Select All';
+      } else {
+        _jtSelected = [...allKeys];
+        selectAll.textContent = 'Clear All';
+      }
+      renderJtChips(); updateJtList(); syncGlobals();
+    });
+    jtPanel.appendChild(selectAll);
+  }
+
+  function updateJtList() {
+    jtPanel.querySelectorAll('.ap-jt-item').forEach(item => {
+      const sel = _jtSelected.includes(item.dataset.key);
+      item.classList.toggle('selected', sel);
+      item.classList.toggle('inc', sel && _jtMode === 'include');
+      item.classList.toggle('exc', sel && _jtMode === 'exclude');
+    });
+    // update select-all label
+    const sa = document.getElementById('ap-jt-select-all');
+    if (sa) sa.textContent = (_jtSelected.length === JOB_TYPES.length) ? 'Clear All' : 'Select All';
+  }
+
+  function applyJtMode(mode) {
+    _jtMode = mode;
+    jtIncExcBtn.textContent = mode === 'include' ? 'Include' : 'Exclude';
+    jtIncExcBtn.className   = `ap-inc-exc-btn ${mode === 'include' ? 'inc' : 'exc'}`;
+    jtChipsRow.dataset.emptyLabel = mode === 'include' ? 'All job types' : 'No exclusions';
+    renderJtChips(); updateJtList(); syncGlobals();
+  }
+
+  jtIncExcBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    applyJtMode(_jtMode === 'include' ? 'exclude' : 'include');
   });
-  storageLoad(STORAGE_KEY_LOCS, (saved) => {
-    _selected = Array.isArray(saved) ? saved : [];
-    buildLocList();
-    renderChips();
-    syncGlobals();
-    _initializing = false;
+
+  jtToggleBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    jtPanel.classList.toggle('open');
+    locPanel.classList.remove('open'); // close the other panel
+  });
+
+  // ── Close panels on outside click ────────────────────────────────────────────
+  document.addEventListener('click', (e) => {
+    if (!locPanel.contains(e.target) && e.target !== locToggleBtn) locPanel.classList.remove('open');
+    if (!jtPanel.contains(e.target)  && e.target !== jtToggleBtn)  jtPanel.classList.remove('open');
   });
 
   // ── Poll mode button ──────────────────────────────────────────────────────────
@@ -487,7 +623,7 @@ function injectBadge() {
   }
 
   // ── Job ID ────────────────────────────────────────────────────────────────────
-  const jobidRow = document.getElementById('ap-jobid-row');
+  const jobidRow   = document.getElementById('ap-jobid-row');
   const jobidInput = document.getElementById('ap-jobid-input');
   jobidInput.addEventListener('input', () => {
     const d = jobidInput.value.replace(/\D/g, '');
@@ -500,16 +636,21 @@ function injectBadge() {
   });
 
   // ── Scan mode toggle (Jobs / Schedules) ───────────────────────────────────────
-  const modeCb = document.getElementById('ap-mode-cb');
+  const modeCb  = document.getElementById('ap-mode-cb');
   const modeLbl = document.getElementById('ap-mode-lbl');
-  const locSection = [chipsRow, document.getElementById('ap-loc-ctrl-row')];
+  const locSection = [
+    locChipsRow,
+    document.getElementById('ap-loc-ctrl-row'),
+    jtChipsRow,
+    document.getElementById('ap-jt-ctrl-row'),
+  ];
 
   function applyMode(isSchedule) {
     window.JS_MODE = isSchedule ? 'schedules' : 'jobs';
     modeLbl.textContent = isSchedule ? 'Poll Schedules' : 'Poll Jobs';
     locSection.forEach(el => el.style.display = isSchedule ? 'none' : '');
     jobidRow.style.display = isSchedule ? 'flex' : 'none';
-    if (!isSchedule) panel.classList.remove('open');
+    if (!isSchedule) { locPanel.classList.remove('open'); jtPanel.classList.remove('open'); }
     storageSave(STORAGE_KEY_MODE, window.JS_MODE);
   }
 
@@ -538,6 +679,32 @@ function injectBadge() {
     wrap.style.left = (e.clientX - dragOffX) + 'px'; wrap.style.top = (e.clientY - dragOffY) + 'px';
   });
   document.addEventListener('mouseup', () => { dragging = false; });
+
+  // ── Init — load saved state ───────────────────────────────────────────────────
+  let _initializing = true;
+
+  storageLoad(STORAGE_KEY_LOCMODE, (saved) => {
+    _locMode = (saved === 'exclude') ? 'exclude' : 'include';
+    applyLocMode(_locMode);
+  });
+  storageLoad(STORAGE_KEY_LOCS, (saved) => {
+    _locSelected = Array.isArray(saved) ? saved : [];
+    buildLocList();
+    renderLocChips();
+    syncGlobals();
+  });
+
+  storageLoad(STORAGE_KEY_JTMODE, (saved) => {
+    _jtMode = (saved === 'exclude') ? 'exclude' : 'include';
+    applyJtMode(_jtMode);
+  });
+  storageLoad(STORAGE_KEY_JOBTYPES, (saved) => {
+    _jtSelected = Array.isArray(saved) ? saved.filter(k => JOB_TYPES.some(t => t.key === k)) : [];
+    buildJtList();
+    renderJtChips();
+    syncGlobals();
+    _initializing = false;
+  });
 
   setStatus('IDLE');
 }

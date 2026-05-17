@@ -57,12 +57,12 @@ if (!isAllowedDomain || !isHomepage) {
     'accept': '*/*',
     'accept-language': 'en-GB,en-US;q=0.9,en;q=0.8',
     'authorization': 'Status|unauthenticated|Session|null',
-    'cache-control': 'no-cache',
+    // 'cache-control': 'no-cache',
     'content-type': 'application/json',
     'country': country,
-    'iscanary': 'false',
-    'pragma': 'no-cache',
-    'x-amz-user-agent': 'aws-amplify/2.0.0',
+    // 'iscanary': 'false',
+    // 'pragma': 'no-cache',
+    // 'x-amz-user-agent': 'aws-amplify/2.0.0',
   };
 
   // ── Polling mode — persists across reloads ────────────────────────────────────
@@ -119,7 +119,7 @@ if (!isAllowedDomain || !isHomepage) {
           rangeFilters: [{ key: "hoursPerWeek", range: { minimum: 0, maximum: 80 } }],
           orFilters: [],
           sorters: [{ fieldName: 'totalPayRateMax', ascending: 'false' }],
-          pageSize: 40,
+          pageSize: 20,
           consolidateSchedule: true
         }
       },
@@ -133,8 +133,8 @@ if (!isAllowedDomain || !isHomepage) {
           locale, country,
           equalFilters: [{ key: 'shiftType', val: 'All' }],
           containFilters: [
-            { key: 'isPrivateSchedule', val: ['false'] },
-            { key: 'jobTitle', val: [job.jobTitle] },
+            { key: 'isPrivateSchedule', val: ['false', 'true'] },
+            // { key: 'jobTitle', val: [job.jobTitle] },
           ],
           dateFilters: [{ key: 'firstDayOnSite', range: { startDate: today } }],
           pageSize: 100, jobId: job.jobId, consolidateSchedule: true,
@@ -155,7 +155,7 @@ if (!isAllowedDomain || !isHomepage) {
           country,
           keyWords: "",
           equalFilters: [],
-          containFilters: [{ key: "isPrivateSchedule", val: ["false"] }],
+          containFilters: [{ key: "isPrivateSchedule", val: ["false","true"] }],
           rangeFilters: [{ key: "hoursPerWeek", range: { minimum: 0, maximum: 80 } }],
           orFilters: [],
           sorters: [{ fieldName: "totalPayRateMax", ascending: false }],

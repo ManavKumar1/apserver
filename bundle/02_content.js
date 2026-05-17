@@ -49,7 +49,7 @@ if (!isAllowedDomain || !isHomepage) {
     // 'accept-language': 'en-GB,en-US;q=0.9,en;q=0.8',
     'authorization': 'Status|unauthenticated|Session|null',
     // 'cache-control': 'no-cache',
-    'content-type': 'application/json',
+    // 'content-type': 'application/json',
     'country': country,
     // 'iscanary': 'false',
     // 'pragma': 'no-cache',
@@ -110,7 +110,7 @@ if (!isAllowedDomain || !isHomepage) {
       },
       query: `query searchJobCardsByLocation($searchJobRequest: SearchJobRequest!) {
         searchJobCardsByLocation(searchJobRequest: $searchJobRequest) {
-          jobCards { jobId jobTitle locationName jobType }
+          jobCards { jobId locationName jobType }
         }
       }`,
     });
@@ -135,7 +135,7 @@ if (!isAllowedDomain || !isHomepage) {
       },
       query: `query searchScheduleCards($searchScheduleRequest: SearchScheduleRequest!) {
         searchScheduleCards(searchScheduleRequest: $searchScheduleRequest) {
-          scheduleCards { jobId scheduleId city state }
+          scheduleCards {scheduleId city }
         }
       }`,
     });
@@ -160,7 +160,7 @@ if (!isAllowedDomain || !isHomepage) {
       },
       query: `query searchScheduleCards($searchScheduleRequest: SearchScheduleRequest!) {
         searchScheduleCards(searchScheduleRequest: $searchScheduleRequest) {
-          scheduleCards { jobId scheduleId city state }
+          scheduleCards { scheduleId city }
         }
       }`,
     });
@@ -170,8 +170,8 @@ if (!isAllowedDomain || !isHomepage) {
     }
 
     function buildSchedLocation(sched) {
-      if (sched.city && sched.state) return `${sched.city}, ${sched.state}`;
-      return sched.city || sched.state || 'Unknown';
+      if (sched.city) return `${sched.city}`;
+      return sched.city || 'Unknown';
     }
 
     function filterJobs(jobCards) {

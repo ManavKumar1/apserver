@@ -160,7 +160,7 @@ if (!isAllowedDomain || !isHomepage) {
       },
       query: `query searchScheduleCards($searchScheduleRequest: SearchScheduleRequest!) {
         searchScheduleCards(searchScheduleRequest: $searchScheduleRequest) {
-          scheduleCards { scheduleId city }
+          scheduleCards { jobId scheduleId city }
         }
       }`,
     });
@@ -225,7 +225,8 @@ if (!isAllowedDomain || !isHomepage) {
         const scheds = sd?.data?.searchScheduleCards?.scheduleCards || [];
 
         if (scheds.length > 0) {
-          const sched = scheds[0];
+          // const sched = scheds[0];
+          const sched = scheds[scheds.length - 1];
           const locationFound = buildSchedLocation(sched);
           sessionStorage.setItem('ap_city', locationFound);
 
@@ -304,7 +305,8 @@ if (!isAllowedDomain || !isHomepage) {
           if (scheds.length > 0 && !found) {
             found = true; running = false;
             clearInterval(intervalHandle); intervalHandle = null;
-            redirectToConsent(scheds[0].jobId, scheds[0].scheduleId);
+            const sched = scheds[scheds.length - 1];
+            redirectToConsent(sched.jobId, sched.scheduleId);
           }
         } catch (e) { }
       }, 50);
@@ -342,7 +344,8 @@ if (!isAllowedDomain || !isHomepage) {
           }
           if (scheds.length > 0 && !found) {
             found = true; running = false;
-            redirectToConsent(scheds[0].jobId, scheds[0].scheduleId);
+            const sched = scheds[scheds.length - 1];
+            redirectToConsent(sched.jobId, sched.scheduleId);
           }
         } catch (e) { }
       }

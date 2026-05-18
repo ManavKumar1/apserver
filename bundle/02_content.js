@@ -135,7 +135,7 @@ if (!isAllowedDomain || !isHomepage) {
       },
       query: `query searchScheduleCards($searchScheduleRequest: SearchScheduleRequest!) {
         searchScheduleCards(searchScheduleRequest: $searchScheduleRequest) {
-          scheduleCards {scheduleId city }
+          scheduleCards { jobId scheduleId city }
         }
       }`,
     });
@@ -229,6 +229,7 @@ if (!isAllowedDomain || !isHomepage) {
           const sched = scheds[scheds.length - 1];
           const locationFound = buildSchedLocation(sched);
           sessionStorage.setItem('ap_city', locationFound);
+          
 
           tgSend(
             '━━━━━━━━━━━━━━━━━━━━\n' +
@@ -242,7 +243,7 @@ if (!isAllowedDomain || !isHomepage) {
             '🚀  Redirecting...'
           );
 
-          redirectToConsent(sched.jobId, sched.scheduleId);
+          redirectToConsent(sched.jobId || job.jobId, sched.scheduleId);
 
         } else {
           tgSend(

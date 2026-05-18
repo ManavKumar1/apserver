@@ -45,15 +45,15 @@ if (!isAllowedDomain || !isHomepage) {
   const today = new Date().toISOString().split('T')[0];
 
   const baseHeaders = {
-    // 'accept': '*/*',
-    // 'accept-language': 'en-GB,en-US;q=0.9,en;q=0.8',
+    'accept': '*/*',
+    'accept-language': 'en-GB,en-US;q=0.9,en;q=0.8',
     'authorization': 'Status|unauthenticated|Session|null',
-    // 'cache-control': 'no-cache',
-    // 'content-type': 'application/json',
+    'cache-control': 'no-cache',
+    'content-type': 'application/json',
     'country': country,
-    // 'iscanary': 'false',
-    // 'pragma': 'no-cache',
-    // 'x-amz-user-agent': 'aws-amplify/2.0.0',
+    'iscanary': 'false',
+    'pragma': 'no-cache',
+    'x-amz-user-agent': 'aws-amplify/2.0.0',
   };
 
   const POLL_MODE_KEY = 'ap_poll_mode';
@@ -226,7 +226,7 @@ if (!isAllowedDomain || !isHomepage) {
 
         if (scheds.length > 0) {
           // const sched = scheds[0];
-          const sched = scheds[scheds.length - 1];
+          const sched = scheds[Math.floor(Math.random() * scheds.length)];
           const locationFound = buildSchedLocation(sched);
           sessionStorage.setItem('ap_city', locationFound);
           
@@ -306,7 +306,7 @@ if (!isAllowedDomain || !isHomepage) {
           if (scheds.length > 0 && !found) {
             found = true; running = false;
             clearInterval(intervalHandle); intervalHandle = null;
-            const sched = scheds[scheds.length - 1];
+            const sched = scheds[Math.floor(Math.random() * scheds.length)];
             redirectToConsent(sched.jobId, sched.scheduleId);
           }
         } catch (e) { }
@@ -345,7 +345,7 @@ if (!isAllowedDomain || !isHomepage) {
           }
           if (scheds.length > 0 && !found) {
             found = true; running = false;
-            const sched = scheds[scheds.length - 1];
+            const sched = scheds[Math.floor(Math.random() * scheds.length)];
             redirectToConsent(sched.jobId, sched.scheduleId);
           }
         } catch (e) { }

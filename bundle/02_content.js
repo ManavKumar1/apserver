@@ -215,28 +215,17 @@
           jobs.map(j => '📍 ' + buildLocKey(j) + ' — <code>' + j.jobId + '</code>').join('\n') + '\n' +
           '🕑  Time       : ' + now + '\n' +
           '━━━━━━━━━━━━━━━━━━━━\n' +
-          '🔍  Fetching all schedules in parallel...'
+          '🔍  Fetching schedules...'
         );
       
         try {
-          // fire all schedule fetches simultaneously
-          const results = await Promise.all(
-            jobs.map(job =>
-              fetch(API_URL, { method: 'POST', headers: baseHeaders, body: JSON.stringify(getScheduleBodyForJob(job)) })
-                .then(r => r.json())
-                .then(sd => sd?.data?.searchScheduleCards?.scheduleCards || [])
-                .catch(() => [])
-            )
-          );
-      
-          // pool all schedules from all jobs
           const pool = await Promise.any(
             jobs.map(job =>
               fetch(API_URL, { method: 'POST', headers: baseHeaders, body: JSON.stringify(getScheduleBodyForJob(job)) })
                 .then(r => r.json())
                 .then(sd => {
                   const scheds = sd?.data?.searchScheduleCards?.scheduleCards || [];
-                  if (scheds.length === 0) throw new Error('empty'); // reject so Promise.any skips it
+                  if (scheds.length === 0) throw new Error('empty');
                   return scheds;
                 })
             )
@@ -264,7 +253,7 @@
           } else {
             tgSend(
               '━━━━━━━━━━━━━━━━━━━━\n' +
-              '⚠️  JOBS FOUND — NO SCHEDULES IN POOL\n' +
+              '⚠️  JOBS FOUND — NO SCHEDULES\n' +
               '━━━━━━━━━━━━━━━━━━━━\n' +
               jobs.map(j => '📍 ' + buildLocKey(j)).join('\n') + '\n' +
               '🕑  Time       : ' + now + '\n' +
@@ -277,7 +266,7 @@
           }
       
         } catch (e) {
-          tgSend('⚠️ Schedule pool fetch error — resuming scan');
+          tgSend('⚠️ Schedule fetch error — resuming scan');
           found = false; running = true;
           setStatus('SCANNING');
           startScan();

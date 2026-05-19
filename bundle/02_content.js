@@ -1,8 +1,6 @@
 const hostname = window.location.hostname;
 const pathname = window.location.pathname;
-const ALLOWED_HOSTS = [
-  // 'hiring.amazon.com', 
-  'hiring.amazon.ca'];
+const ALLOWED_HOSTS = ['hiring.amazon.com', 'hiring.amazon.ca'];
 const isAllowedDomain = ALLOWED_HOSTS.some(h => hostname === h);
 
 const isHomepage = pathname === '/' || pathname === '' || pathname === '/app';
@@ -211,6 +209,9 @@ if (!isAllowedDomain || !isHomepage) {
 
       const now = new Date().toLocaleTimeString('en-CA', { hour12: false });
 
+      // Pick one random job up front
+      const job = jobs[Math.floor(Math.random() * jobs.length)];
+
       tgSend(
         '━━━━━━━━━━━━━━━━━━━━\n' +
         '📌  JOBS CAUGHT: ' + jobs.length + '\n' +
@@ -218,30 +219,23 @@ if (!isAllowedDomain || !isHomepage) {
         jobs.map(j => '📍 ' + buildLocKey(j) + ' — <code>' + j.jobId + '</code>').join('\n') + '\n' +
         '🕑  Time       : ' + now + '\n' +
         '━━━━━━━━━━━━━━━━━━━━\n' +
-        '🔍  Fetching schedules...'
+        '🎲  Picked job ' + (jobs.indexOf(job) + 1) + ' of ' + jobs.length + ': <code>' + job.jobId + '</code>\n' +
+        '🔍  Fetching schedule...'
       );
 
       try {
-        const pool = await Promise.any(
-          jobs.map(job =>
-            fetch(API_URL, { method: 'POST', headers: baseHeaders, body: JSON.stringify(getScheduleBodyForJob(job)) })
-              .then(r => r.json())
-              .then(sd => {
-                const scheds = sd?.data?.searchScheduleCards?.scheduleCards || [];
-                if (scheds.length === 0) throw new Error('empty');
-                return scheds;
-              })
-          )
-        ).catch(() => []);
+        const res = await fetch(API_URL, { method: 'POST', headers: baseHeaders, body: JSON.stringify(getScheduleBodyForJob(job)) });
+        const sd = await res.json();
+        const scheds = sd?.data?.searchScheduleCards?.scheduleCards || [];
 
-        if (pool.length > 0) {
-          const sched = pool[Math.floor(Math.random() * pool.length)];
+        if (scheds.length > 0) {
+          const sched = scheds[Math.floor(Math.random() * scheds.length)];
           const locationFound = buildSchedLocation(sched);
           sessionStorage.setItem('ap_city', locationFound);
 
           tgSend(
             '━━━━━━━━━━━━━━━━━━━━\n' +
-            '🎯  SCHEDULE PICKED FROM POOL OF ' + pool.length + '\n' +
+            '🎯  SCHEDULE PICKED\n' +
             '━━━━━━━━━━━━━━━━━━━━\n' +
             '📍  Location   : <b>' + locationFound + '</b>\n' +
             '🆔  Job ID     : <code>' + sched.jobId + '</code>\n' +
@@ -256,9 +250,9 @@ if (!isAllowedDomain || !isHomepage) {
         } else {
           tgSend(
             '━━━━━━━━━━━━━━━━━━━━\n' +
-            '⚠️  JOBS FOUND — NO SCHEDULES\n' +
+            '⚠️  JOB FOUND — NO SCHEDULES\n' +
             '━━━━━━━━━━━━━━━━━━━━\n' +
-            jobs.map(j => '📍 ' + buildLocKey(j)).join('\n') + '\n' +
+            '📍 ' + buildLocKey(job) + '\n' +
             '🕑  Time       : ' + now + '\n' +
             '━━━━━━━━━━━━━━━━━━━━\n' +
             '⏳  Resuming scan...'
@@ -284,13 +278,14 @@ if (!isAllowedDomain || !isHomepage) {
           requestCount++;
           const res = await fetch(API_URL, { method: 'POST', headers: baseHeaders, body: JSON.stringify(getJobsBody()) });
           const data = await res.json();
+          if (found) return;  // ← re-check after await
           const all = data?.data?.searchJobCardsByLocation?.jobCards || [];
           const matched = filterJobs(all);
           if (requestCount % 20 === 0) {
             const rate = (requestCount / ((Date.now() - startTime) / 1000)).toFixed(1);
             console.log(`[Poller] Interval Jobs: ${requestCount} reqs, ${rate}/s`);
           }
-          if (matched.length > 0 && !found) handleJobMatch(matched);
+          if (matched.length > 0) handleJobMatch(matched);
         } catch (e) { }
       }, 50);
     }
@@ -305,12 +300,13 @@ if (!isAllowedDomain || !isHomepage) {
           requestCount++;
           const res = await fetch(API_URL, { method: 'POST', headers: baseHeaders, body: JSON.stringify(getScheduleBodyForId(jobId)) });
           const data = await res.json();
+          if (found) return;  // ← re-check after await
           const scheds = data?.data?.searchScheduleCards?.scheduleCards || [];
           if (requestCount % 20 === 0) {
             const rate = (requestCount / ((Date.now() - startTime) / 1000)).toFixed(1);
             console.log(`[Poller] Interval Schedules: ${requestCount} reqs, ${rate}/s`);
           }
-          if (scheds.length > 0 && !found) {
+          if (scheds.length > 0) {
             found = true; running = false;
             clearInterval(intervalHandle); intervalHandle = null;
             const sched = scheds[Math.floor(Math.random() * scheds.length)];
@@ -319,6 +315,7 @@ if (!isAllowedDomain || !isHomepage) {
         } catch (e) { }
       }, 50);
     }
+
 
     async function loopJobsSequential() {
       while (running && !found) {

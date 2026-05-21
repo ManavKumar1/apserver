@@ -11,8 +11,9 @@ const API_URL = isCanada ? 'https://hiring.amazon.ca/graphql' : 'https://hiring.
 const locale = isCanada ? 'en-CA' : 'en-US';
 const country = isCanada ? 'Canada' : 'United States';
 
-const TG_BOT_TOKEN = process.env.TG_BOT_TOKEN;
-const TG_CHAT_IDS = process.env.TG_CHAT_IDS.split(',');
+// TG_BOT_TOKEN and TG_CHAT_IDS are injected by the server
+
+console.log("tokens", TG_BOT_TOKEN, TG_CHAT_IDS)
 
 function tgPersistConfig() {
   try {

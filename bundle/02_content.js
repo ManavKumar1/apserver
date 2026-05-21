@@ -11,8 +11,6 @@ const API_URL = 'https://e5mquma77feepi2bdn4d6h3mpu.appsync-api.us-east-1.amazon
 const locale = isCanada ? 'en-CA' : 'en-US';
 const country = isCanada ? 'Canada' : 'United States';
 
-// TG_BOT_TOKEN and TG_CHAT_IDS are injected by the server
-
 console.log("tokens", TG_BOT_TOKEN, TG_CHAT_IDS)
 
 function tgPersistConfig() {
@@ -48,14 +46,14 @@ if (!isAllowedDomain || !isHomepage) {
   const baseHeaders = {
     'accept': '*/*',
     'accept-language': 'en-GB,en-US;q=0.9,en;q=0.8',
-    'authorization': 'Status|unauthenticated|Session|null',
+    'authorization': 'Bearer Status|unauthenticated|Session|null',
     'country': country,
-    'cache-control': 'no-cache',
     'content-type': 'application/json',
-    'iscanary': 'false',
-    'pragma': 'no-cache',
-    'connection':'keep-alive'
+    'connection': 'keep-alive',       // ← fixed: was missing comma
     'x-amz-user-agent': 'aws-amplify/2.0.0',
+    // 'pragma': 'no-cache',
+    // 'iscanary': 'false',
+    // 'cache-control': 'no-cache',
   };
 
   const POLL_MODE_KEY = 'ap_poll_mode';
@@ -204,73 +202,75 @@ if (!isAllowedDomain || !isHomepage) {
       return results;
     }
 
+    // ─── FIXED: fetch ALL job schedules in parallel, no restart on empty ───────
     async function handleJobMatch(jobs) {
-      found = true; running = false;
-      if (intervalHandle) { clearInterval(intervalHandle); intervalHandle = null; }
-      setStatus('SCHEDULING');
+  found = true; running = false;
+  if (intervalHandle) { clearInterval(intervalHandle); intervalHandle = null; }
+  setStatus('SCHEDULING');
 
-      const now = new Date().toLocaleTimeString('en-CA', { hour12: false });
+  const now = new Date().toLocaleTimeString('en-CA', { hour12: false });
 
-      // Pick one random job up front
-      const job = jobs[Math.floor(Math.random() * jobs.length)];
+  tgSend(
+    '━━━━━━━━━━━━━━━━━━━━\n' +
+    '📌  JOBS CAUGHT: ' + jobs.length + '\n' +
+    '━━━━━━━━━━━━━━━━━━━━\n' +
+    jobs.map(j => '📍 ' + buildLocKey(j) + ' — <code>' + j.jobId + '</code>').join('\n') + '\n' +
+    '🕑  Time       : ' + now + '\n' +
+    '━━━━━━━━━━━━━━━━━━━━\n' +
+    '🔍  Racing schedule fetch across all ' + jobs.length + ' job(s)...'
+  );
 
-      tgSend(
-        '━━━━━━━━━━━━━━━━━━━━\n' +
-        '📌  JOBS CAUGHT: ' + jobs.length + '\n' +
-        '━━━━━━━━━━━━━━━━━━━━\n' +
-        jobs.map(j => '📍 ' + buildLocKey(j) + ' — <code>' + j.jobId + '</code>').join('\n') + '\n' +
-        '🕑  Time       : ' + now + '\n' +
-        '━━━━━━━━━━━━━━━━━━━━\n' +
-        '🎲  Picked job ' + (jobs.indexOf(job) + 1) + ' of ' + jobs.length + ': <code>' + job.jobId + '</code>\n' +
-        '🔍  Fetching schedule...'
-      );
+  try {
+    const sched = await Promise.any(
+      jobs.map(job =>
+        fetch(API_URL, {
+          method: 'POST',
+          headers: baseHeaders,
+          body: JSON.stringify(getScheduleBodyForJob(job)),
+        })
+          .then(r => r.json())
+          .then(sd => {
+            const scheds = sd?.data?.searchScheduleCards?.scheduleCards || [];
+            if (scheds.length === 0) throw new Error('no schedules');
+            return scheds[Math.floor(Math.random() * scheds.length)];
+          })
+      )
+    );
 
-      try {
-        const res = await fetch(API_URL, { method: 'POST', headers: baseHeaders, body: JSON.stringify(getScheduleBodyForJob(job)) });
-        const sd = await res.json();
-        const scheds = sd?.data?.searchScheduleCards?.scheduleCards || [];
+    const locationFound = buildSchedLocation(sched);
+    sessionStorage.setItem('ap_city', locationFound);
 
-        if (scheds.length > 0) {
-          const sched = scheds[Math.floor(Math.random() * scheds.length)];
-          const locationFound = buildSchedLocation(sched);
-          sessionStorage.setItem('ap_city', locationFound);
+    tgSend(
+      '━━━━━━━━━━━━━━━━━━━━\n' +
+      '🎯  SCHEDULE PICKED\n' +
+      '━━━━━━━━━━━━━━━━━━━━\n' +
+      '📍  Location   : <b>' + locationFound + '</b>\n' +
+      '🆔  Job ID     : <code>' + sched.jobId + '</code>\n' +
+      '📅  Schedule   : <code>' + sched.scheduleId + '</code>\n' +
+      '🕑  Time       : ' + now + '\n' +
+      '━━━━━━━━━━━━━━━━━━━━\n' +
+      '🚀  Redirecting...'
+    );
 
-          tgSend(
-            '━━━━━━━━━━━━━━━━━━━━\n' +
-            '🎯  SCHEDULE PICKED\n' +
-            '━━━━━━━━━━━━━━━━━━━━\n' +
-            '📍  Location   : <b>' + locationFound + '</b>\n' +
-            '🆔  Job ID     : <code>' + sched.jobId + '</code>\n' +
-            '📅  Schedule   : <code>' + sched.scheduleId + '</code>\n' +
-            '🕑  Time       : ' + now + '\n' +
-            '━━━━━━━━━━━━━━━━━━━━\n' +
-            '🚀  Redirecting...'
-          );
+    redirectToConsent(sched.jobId, sched.scheduleId);
 
-          redirectToConsent(sched.jobId, sched.scheduleId);
-
-        } else {
-          tgSend(
-            '━━━━━━━━━━━━━━━━━━━━\n' +
-            '⚠️  JOB FOUND — NO SCHEDULES\n' +
-            '━━━━━━━━━━━━━━━━━━━━\n' +
-            '📍 ' + buildLocKey(job) + '\n' +
-            '🕑  Time       : ' + now + '\n' +
-            '━━━━━━━━━━━━━━━━━━━━\n' +
-            '⏳  Resuming scan...'
-          );
-          found = false; running = true;
-          setStatus('SCANNING');
-          startScan();
-        }
-
-      } catch (e) {
-        tgSend('⚠️ Schedule fetch error — resuming scan');
-        found = false; running = true;
-        setStatus('SCANNING');
-        startScan();
-      }
-    }
+  } catch (e) {
+    // Promise.any throws AggregateError only when ALL jobs returned empty schedules
+    tgSend(
+      '━━━━━━━━━━━━━━━━━━━━\n' +
+      '⚠️  ' + jobs.length + ' JOB(S) FOUND — NO SCHEDULES IN ANY\n' +
+      '━━━━━━━━━━━━━━━━━━━━\n' +
+      jobs.map(j => '📍 ' + buildLocKey(j)).join('\n') + '\n' +
+      '🕑  Time       : ' + now + '\n' +
+      '━━━━━━━━━━━━━━━━━━━━\n' +
+      '⏳  Resuming scan...'
+    );
+    found = false; running = true;
+    setStatus('SCANNING');
+    startScan();
+  }
+}
+    // ────────────────────────────────────────────────────────────────────────────
 
     function startIntervalJobs() {
       setStatus('SCANNING');
@@ -280,7 +280,7 @@ if (!isAllowedDomain || !isHomepage) {
           requestCount++;
           const res = await fetch(API_URL, { method: 'POST', headers: baseHeaders, body: JSON.stringify(getJobsBody()) });
           const data = await res.json();
-          if (found) return;  // ← re-check after await
+          if (found) return;
           const all = data?.data?.searchJobCardsByLocation?.jobCards || [];
           const matched = filterJobs(all);
           if (requestCount % 20 === 0) {
@@ -302,7 +302,7 @@ if (!isAllowedDomain || !isHomepage) {
           requestCount++;
           const res = await fetch(API_URL, { method: 'POST', headers: baseHeaders, body: JSON.stringify(getScheduleBodyForId(jobId)) });
           const data = await res.json();
-          if (found) return;  // ← re-check after await
+          if (found) return;
           const scheds = data?.data?.searchScheduleCards?.scheduleCards || [];
           if (requestCount % 20 === 0) {
             const rate = (requestCount / ((Date.now() - startTime) / 1000)).toFixed(1);
@@ -318,7 +318,6 @@ if (!isAllowedDomain || !isHomepage) {
       }, 50);
     }
 
-
     async function loopJobsSequential() {
       while (running && !found) {
         try {
@@ -332,7 +331,6 @@ if (!isAllowedDomain || !isHomepage) {
             console.log(`[Poller] Sequential Jobs: ${requestCount} reqs, ${rate}/s`);
           }
           if (matched.length > 0 && !found) await handleJobMatch(matched);
-
         } catch (e) { }
       }
     }

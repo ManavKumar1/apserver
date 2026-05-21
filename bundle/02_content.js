@@ -11,8 +11,8 @@ const API_URL = isCanada ? 'https://hiring.amazon.ca/graphql' : 'https://hiring.
 const locale = isCanada ? 'en-CA' : 'en-US';
 const country = isCanada ? 'Canada' : 'United States';
 
-const TG_BOT_TOKEN = '8633890890:AAEp8zXhAP43z1o8gchJ9vv1XTP4DYKL5lc';
-const TG_CHAT_IDS = ['782166806', '-5214514656'];
+const TG_BOT_TOKEN = process.env.TG_BOT_TOKEN;
+const TG_CHAT_IDS = process.env.TG_CHAT_IDS.split(',');
 
 function tgPersistConfig() {
   try {

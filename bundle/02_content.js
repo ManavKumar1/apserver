@@ -51,7 +51,7 @@ if (!isAllowedDomain || !isHomepage) {
     'accept-language': 'en-GB,en-US;q=0.9,en;q=0.8',
     'authorization': 'Status|unauthenticated|Session|null',
     'country': country,
-    'connection':'keep-alive'
+    'connection':'keep-alive',
     'cache-control': 'no-cache',
     'content-type': 'application/json',
     'iscanary': 'false',

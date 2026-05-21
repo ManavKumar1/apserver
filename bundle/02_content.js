@@ -6,8 +6,8 @@ const isAllowedDomain = ALLOWED_HOSTS.some(h => hostname === h);
 const isHomepage = pathname === '/' || pathname === '' || pathname === '/app';
 
 const isCanada = hostname.includes('.ca');
-// const API_URL = 'https://e5mquma77feepi2bdn4d6h3mpu.appsync-api.us-east-1.amazonaws.com/graphql';
-const API_URL = isCanada ? 'https://hiring.amazon.ca/graphql' : 'https://hiring.amazon.com/graphql';
+const API_URL = 'https://e5mquma77feepi2bdn4d6h3mpu.appsync-api.us-east-1.amazonaws.com/graphql';
+// const API_URL = isCanada ? 'https://hiring.amazon.ca/graphql' : 'https://hiring.amazon.com/graphql';
 const locale = isCanada ? 'en-CA' : 'en-US';
 const country = isCanada ? 'Canada' : 'United States';
 
@@ -54,6 +54,7 @@ if (!isAllowedDomain || !isHomepage) {
     'content-type': 'application/json',
     'iscanary': 'false',
     'pragma': 'no-cache',
+    'connection':'keep-alive'
     'x-amz-user-agent': 'aws-amplify/2.0.0',
   };
 
@@ -106,7 +107,7 @@ if (!isAllowedDomain || !isHomepage) {
           dateFilters: [{ key: 'firstDayOnSite', range: { startDate: today } }],
           orFilters: [],
           sorters: [{ fieldName: 'totalPayRateMax', ascending: 'false' }],
-          pageSize: 1000,
+          pageSize: 100,
           consolidateSchedule: true,
         }
       },

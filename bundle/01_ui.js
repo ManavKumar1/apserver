@@ -1,5 +1,5 @@
 // ui.js — Badge UI with location + job type selector panels
-const AP_VERSION = '2.0.infi';
+const AP_VERSION = '2.0.62';
 
 const LOCATIONS = [
   // Ontario

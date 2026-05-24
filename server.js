@@ -1,4 +1,4 @@
-require('dotenv').config({ path: '../.env' });
+// require('dotenv').config({ path: '../.env' });
 const express = require('express');
 const cors = require('cors');
 const fs = require('fs');
@@ -30,12 +30,12 @@ app.get('/bundle.js', (req, res) => {
       const code = fs.readFileSync(path.join(BUNDLE_DIR, f), 'utf8');
       return `\n// ═══ ${f} ═══\n${code}\n`;
     });
-    const injected = `const TG_BOT_TOKEN = ${JSON.stringify(process.env.TG_BOT_TOKEN)};\nconst TG_CHAT_IDS = ${JSON.stringify((process.env.TG_CHAT_IDS || '').split(','))};\n`;
+    // const injected = `const TG_BOT_TOKEN = ${JSON.stringify(process.env.TG_BOT_TOKEN)};\nconst TG_CHAT_IDS = ${JSON.stringify((process.env.TG_CHAT_IDS || '').split(','))};\n`;
 
     const bundle = [
       `// ApplyPilot Bundle — generated ${new Date().toISOString()}`,
       `// Files: ${files.join(', ')}`,
-      injected,
+      // injected,
       ...parts,
     ].join('\n');
     res.setHeader('Content-Type', 'application/javascript');

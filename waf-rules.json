@@ -1,0 +1,29 @@
+[
+  {
+    "id": 1,
+    "priority": 1,
+    "action": { "type": "block" },
+    "condition": {
+      "regexFilter": "^https://[^/]+\\.token\\.awswaf\\.com/.*/inputs.*",
+      "initiatorDomains": ["hiring.amazon.ca", "hiring.amazon.com"]
+    }
+  },
+  {
+    "id": 2,
+    "priority": 1,
+    "action": { "type": "block" },
+    "condition": {
+      "regexFilter": "^https://[^/]+\\.token\\.awswaf\\.com/.*/mp_verify.*",
+      "initiatorDomains": ["hiring.amazon.ca", "hiring.amazon.com"]
+    }
+  },
+  {
+    "id": 3,
+    "priority": 1,
+    "action": { "type": "block" },
+    "condition": {
+      "regexFilter": "^https://dataplane\\.rum\\.[^.]+\\.amazonaws\\.com/appmonitors/.*",
+      "initiatorDomains": ["hiring.amazon.ca", "hiring.amazon.com"]
+    }
+  }
+]

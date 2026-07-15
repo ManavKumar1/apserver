@@ -81,12 +81,12 @@ if (!isAllowedDomain || !isHomepage) {
       ? 'https://hiring.amazon.ca/application/ca/#/consent'
       : 'https://hiring.amazon.com/application/us/#/consent';
     const url = `${base}?country=${isCanada ? 'ca' : 'us'}&jobId=${jobId}&locale=${locale}&scheduleId=${scheduleId}`;
-    setStatus('APPLYING');
+    setStatus('Manual application form Filling');
     window.location.replace(url);
   }
 
   if (sessionStorage.getItem('js_applied') === '1') {
-    setStatus('APPLIED');
+    setStatus('MANUALLY APPLIED');
   } else {
 
     let requestCount = 0;
@@ -388,10 +388,17 @@ if (!isAllowedDomain || !isHomepage) {
 
     window.JS_ON_MODE_CHANGE = () => { running = false; setStatus('IDLE'); };
     window.JS_TOGGLE_SCAN = () => {
-      if (typeof window.JS_IS_APPLIED === 'function' && window.JS_IS_APPLIED()) resetForRescan();
+      if (typeof window.JS_IS_APPLIED === 'function' && window.JS_IS_APPLIED()) {
+        resetForRescan();
+        return;
+      }
+      if (running) stopScan();
+      else startScan();
     };
 
-    setTimeout(() => { console.log('[Poller] Auto-starting…'); startScan(); }, 900);
+    // Delay auto-start to 1500ms so 04_hq_check.js (which fires at ~100ms)
+    // has time to dispatch its status and settle _hqBlocked before we try to start.
+    setTimeout(() => { console.log('[Poller] Auto-starting…'); startScan(); }, 1500);
 
   }
 }

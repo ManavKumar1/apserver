@@ -127,6 +127,14 @@ function injectBadge() {
 #ap-label{color:rgb(30,30,30);font-size:11.5px;font-weight:700;letter-spacing:0.04em;text-transform:uppercase;line-height:1.3;}
 #ap-version{color:rgb(180,180,180);font-size:9px;font-weight:600;letter-spacing:0.04em;}
 #ap-stopwatch{color:rgb(80,80,80);font-size:10px;font-weight:600;font-variant-numeric:tabular-nums;display:none;}
+#ap-expiry{font-size:9.5px;font-weight:600;color:rgb(130,130,130);display:none;}
+#ap-expiry.on{display:block;}
+#ap-expiry.warn{color:rgb(200,80,0);}
+#ap-lock-view{display:none;flex-direction:column;align-items:center;gap:10px;padding:8px 0 4px;text-align:center;width:100%;}
+#ap-lock-view.on{display:flex;}
+#ap-lock-icon{font-size:32px;line-height:1;}
+#ap-lock-title{font-size:11.5px;font-weight:800;letter-spacing:0.04em;text-transform:uppercase;color:rgb(40,40,40);}
+#ap-lock-msg{font-size:10px;line-height:1.5;color:rgb(90,90,90);}
 
 /* scan mode row */
 #ap-mode-row{display:flex;align-items:center;gap:6px;}
@@ -297,30 +305,38 @@ function injectBadge() {
     <div id="ap-body">
       <span id="ap-label">Starting\u2026</span>
       <span id="ap-version">v${AP_VERSION}</span>
+      <span id="ap-expiry"></span>
       <span id="ap-stopwatch">00:00</span>
-      <div id="ap-mode-row">
-        <label id="ap-mode-toggle"><input type="checkbox" id="ap-mode-cb"/><span id="ap-mode-slider"></span></label>
-        <span id="ap-mode-lbl">Poll Jobs</span>
+
+      <div id="ap-lock-view">
+        <div id="ap-lock-icon"></div>
+        <div id="ap-lock-title"></div>
+        <div id="ap-lock-msg"></div>
       </div>
 
-      <!-- Location section -->
-      <div id="ap-loc-chips-row" class="ap-chips-row" data-empty-label="All locations"></div>
-      <div id="ap-loc-ctrl-row" class="ap-ctrl-row">
-        <button id="ap-loc-toggle-btn">\u271a Locations</button>
-        <button id="ap-loc-inc-exc-btn" class="ap-inc-exc-btn inc">Include</button>
-        <button id="ap-poll-mode-btn" title="Toggle polling mode">\uD83D\uDD17 Sequential</button>
-      </div>
+      <div id="ap-normal-view">
+        <div id="ap-mode-row">
+          <label id="ap-mode-toggle"><input type="checkbox" id="ap-mode-cb"/><span id="ap-mode-slider"></span></label>
+          <span id="ap-mode-lbl">Poll Jobs</span>
+        </div>
 
-      <!-- Job Type section -->
-      <div id="ap-jt-chips-row" class="ap-chips-row" data-empty-label="All job types"></div>
-      <div id="ap-jt-ctrl-row" class="ap-ctrl-row">
-        <button id="ap-jt-toggle-btn">\u2714 Job Type</button>
-        <button id="ap-jt-inc-exc-btn" class="ap-inc-exc-btn inc">Include</button>
-      </div>
+        <div id="ap-loc-chips-row" class="ap-chips-row" data-empty-label="All locations"></div>
+        <div id="ap-loc-ctrl-row" class="ap-ctrl-row">
+          <button id="ap-loc-toggle-btn">\u271a Locations</button>
+          <button id="ap-loc-inc-exc-btn" class="ap-inc-exc-btn inc">Include</button>
+          <button id="ap-poll-mode-btn" title="Toggle polling mode">\uD83D\uDD17 Sequential</button>
+        </div>
 
-      <div id="ap-jobid-row">
-        <span id="ap-jobid-prefix">${_pfx}</span>
-        <input id="ap-jobid-input" type="text" placeholder="12345"/>
+        <div id="ap-jt-chips-row" class="ap-chips-row" data-empty-label="All job types"></div>
+        <div id="ap-jt-ctrl-row" class="ap-ctrl-row">
+          <button id="ap-jt-toggle-btn">\u2714 Job Type</button>
+          <button id="ap-jt-inc-exc-btn" class="ap-inc-exc-btn inc">Include</button>
+        </div>
+
+        <div id="ap-jobid-row">
+          <span id="ap-jobid-prefix">${_pfx}</span>
+          <input id="ap-jobid-input" type="text" placeholder="12345"/>
+        </div>
       </div>
     </div>
     <div id="ap-orb"><span class="ap-orb-dot"></span></div>
@@ -707,6 +723,55 @@ function injectBadge() {
   });
 
   setStatus('IDLE');
+
+  // ── Expiry ────────────────────────────────────────────────────────────────
+  function _apSetExpiry(d) {
+    var el = document.getElementById('ap-expiry');
+    if (!el) return;
+    var raw = d && (d.expires_iso || d.expires);
+    if (!raw) { el.className = ''; el.textContent = ''; return; }
+    var dt = new Date(raw);
+    if (!isNaN(dt.getTime())) {
+      el.textContent = 'Expiry: ' + dt.toLocaleDateString('en-CA', { day: 'numeric', month: 'short', year: 'numeric' });
+      el.className = (dt - Date.now()) / 86400000 < 7 ? 'warn on' : 'on';
+    } else {
+      var txt = String(d.expires || '').trim();
+      el.textContent = txt ? 'Expiry: ' + txt : '';
+      el.className = txt ? 'on' : '';
+    }
+  }
+
+  // ── Lock / unlock normal-view ────────────────────────────────────────────
+  var _LOCK_ICONS  = { maintenance:'\uD83D\uDD27', disabled:'\uD83D\uDEAB', expired:'\u23F0', invalid:'\u26D4', offline:'\uD83D\uDCF5' };
+  var _LOCK_TITLES = { maintenance:'Down for Maintenance', disabled:'Access Disabled', expired:'Licence Expired', invalid:'Invalid Licence', offline:'Cannot Reach HQ' };
+  var _LOCK_MSGS   = { maintenance:'Down for maintenance. Check back soon.', disabled:'Your access has been paused. Contact support.', expired:'Your licence has expired. Please renew.', invalid:'Licence check failed. Please reinstall or contact support.', offline:'Cannot reach the licence server. Retrying\u2026' };
+
+  function _apLock(d) {
+    var r = d.reason || 'disabled';
+    document.getElementById('ap-lock-icon').textContent  = _LOCK_ICONS[r]  || _LOCK_ICONS.disabled;
+    document.getElementById('ap-lock-title').textContent = _LOCK_TITLES[r] || _LOCK_TITLES.disabled;
+    document.getElementById('ap-lock-msg').textContent   = d.message || _LOCK_MSGS[r] || _LOCK_MSGS.disabled;
+    document.getElementById('ap-lock-view').classList.add('on');
+    document.getElementById('ap-normal-view').style.display = 'none';
+  }
+
+  function _apUnlock() {
+    document.getElementById('ap-lock-view').classList.remove('on');
+    document.getElementById('ap-normal-view').style.display = '';
+  }
+
+  // ── HQ listeners ─────────────────────────────────────────────────────────
+  window.addEventListener('__ap_hq_status', function(e) {
+    var d = e.detail || {};
+    _apSetExpiry(d);
+    if (d.allow) _apUnlock(); else _apLock(d);
+  });
+  window.addEventListener('__ap_hq_lock', function(e) {
+    var d = e.detail || {};
+    _apSetExpiry(d);
+    _apLock({ reason: d.reason || 'disabled', message: d.message || '' });
+  });
+  window.addEventListener('__ap_hq_unlock', _apUnlock);
 }
 
 // ── setStatus ─────────────────────────────────────────────────────────────────
@@ -762,3 +827,15 @@ function resetForRescan() {
 }
 
 window.JS_IS_APPLIED = () => startBtnEl && startBtnEl.style.display === 'flex';
+
+// Boot race fix: 04_hq_check.js fires __ap_hq_status from cache at ~100ms,
+// before injectBadge() runs (~400ms). Capture it here and replay at 1200ms.
+(function () {
+  var _d = null;
+  function _s(e) { _d = e.detail || {}; }
+  window.addEventListener('__ap_hq_status', _s);
+  setTimeout(function () {
+    window.removeEventListener('__ap_hq_status', _s);
+    if (_d) window.dispatchEvent(new CustomEvent('__ap_hq_status', { detail: _d }));
+  }, 1200);
+})();

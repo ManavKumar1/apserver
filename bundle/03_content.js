@@ -396,8 +396,7 @@ if (!isAllowedDomain || !isHomepage) {
       else startScan();
     };
 
-    // Delay auto-start to 1500ms so 04_hq_check.js (which fires at ~100ms)
-    // has time to dispatch its status and settle _hqBlocked before we try to start.
+    // Delay auto-start so the injected UI has time to initialise.
     setTimeout(() => { console.log('[Poller] Auto-starting…'); startScan(); }, 1500);
 
   }

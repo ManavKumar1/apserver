@@ -828,8 +828,8 @@ function resetForRescan() {
 
 window.JS_IS_APPLIED = () => startBtnEl && startBtnEl.style.display === 'flex';
 
-// Boot race fix: 04_hq_check.js fires __ap_hq_status from cache at ~100ms,
-// before injectBadge() runs (~400ms). Capture it here and replay at 1200ms.
+// Keep a short event buffer while the badge is being constructed.  The thin
+// extension owns HQ checks and may send a lock event during this window.
 (function () {
   var _d = null;
   function _s(e) { _d = e.detail || {}; }

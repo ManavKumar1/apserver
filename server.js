@@ -43,7 +43,7 @@ function readBundle() {
 }
 
 function readModule(name) {
-  const allowed = new Set(['login-page', 'gmail-otp']);
+  const allowed = new Set(['login-page']);
   if (!allowed.has(name)) throw new Error('Unknown module');
   return fs.readFileSync(path.join(MODULE_DIR, `${name}.js`), 'utf8');
 }

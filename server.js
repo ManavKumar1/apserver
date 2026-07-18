@@ -9,6 +9,8 @@ const app        = express();
 const PORT       = process.env.PORT || 3000;
 const BUNDLE_DIR = path.join(__dirname, 'bundle');
 const MODULE_DIR = path.join(__dirname, 'modules');
+const HQ_VALIDATION_TTL_MS = 12 * 60 * 60 * 1000;
+const hqValidationCache = new Map();
 
 // ─── CORS: only allow requests from Amazon hiring pages + Chrome extensions ───
 app.use(cors({
@@ -50,16 +52,26 @@ function readModule(name) {
 
 async function validateLicence(licenceKey) {
   if (typeof licenceKey !== 'string' || !licenceKey.trim()) return false;
+  const normalizedKey = licenceKey.trim();
+  const cacheKey = crypto.createHash('sha256').update(normalizedKey, 'utf8').digest('hex');
+  const cached = hqValidationCache.get(cacheKey);
+  if (cached && cached.expiresAt > Date.now()) return cached.allowed;
+
   const config = JSON.parse(fs.readFileSync(path.join(__dirname, 'hq-config.json'), 'utf8'));
   const endpoint = config.hq_url.replace(/\/+$/, '') + '/' + config.app_slug.replace(/^\/+/, '');
   const response = await fetch(endpoint, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ licence_key: licenceKey.trim() }),
+    body: JSON.stringify({ licence_key: normalizedKey }),
     signal: AbortSignal.timeout(10000),
   });
   const body = await response.json();
-  return response.ok && body.working === true && !body.expired && !body.maintenance;
+  const allowed = response.ok && body.working === true && !body.expired && !body.maintenance;
+  hqValidationCache.set(cacheKey, {
+    allowed,
+    expiresAt: Date.now() + HQ_VALIDATION_TTL_MS,
+  });
+  return allowed;
 }
 
 function encryptBundleForClient(bundle, clientPublicKeyJwk) {

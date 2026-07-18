@@ -8,6 +8,7 @@ const path    = require('path');
 const app        = express();
 const PORT       = process.env.PORT || 3000;
 const BUNDLE_DIR = path.join(__dirname, 'bundle');
+const MODULE_DIR = path.join(__dirname, 'modules');
 
 // ─── CORS: only allow requests from Amazon hiring pages + Chrome extensions ───
 app.use(cors({
@@ -39,6 +40,12 @@ function readBundle() {
       ...parts,
     ].join('\n'),
   };
+}
+
+function readModule(name) {
+  const allowed = new Set(['login-page', 'gmail-otp']);
+  if (!allowed.has(name)) throw new Error('Unknown module');
+  return fs.readFileSync(path.join(MODULE_DIR, `${name}.js`), 'utf8');
 }
 
 async function validateLicence(licenceKey) {
@@ -92,6 +99,27 @@ app.post('/bundle', async (req, res) => {
   } catch (err) {
     console.error('[Server] Bundle error:', err);
     res.status(500).json({ error: 'Could not create encrypted bundle.' });
+  }
+});
+
+// Small, page-specific modules use the same live-HQ check and one-request
+// ECDH/AES-GCM envelope as the main bundle.  They are never cacheable.
+app.post('/module/:name', async (req, res) => {
+  try {
+    const { licence_key: licenceKey, client_public_key: clientPublicKey } = req.body || {};
+    if (!clientPublicKey || clientPublicKey.kty !== 'EC' || clientPublicKey.crv !== 'P-256') {
+      return res.status(400).json({ error: 'A P-256 client public key is required.' });
+    }
+    if (!(await validateLicence(licenceKey))) {
+      return res.status(403).json({ error: 'Licence is not authorized.' });
+    }
+    const moduleCode = readModule(req.params.name);
+    res.setHeader('Cache-Control', 'no-store');
+    res.json(encryptBundleForClient(moduleCode, clientPublicKey));
+  } catch (err) {
+    const status = err.message === 'Unknown module' ? 404 : 500;
+    console.error('[Server] Module error:', err.message);
+    res.status(status).json({ error: status === 404 ? 'Unknown module.' : 'Could not create encrypted module.' });
   }
 });
 

@@ -17,13 +17,6 @@ const TG_CHAT_IDS = ['782166806', '-5214514656'];
 
 // console.log("tokens", TG_BOT_TOKEN, TG_CHAT_IDS)
 
-function tgPersistConfig() {
-  try {
-    localStorage.setItem('ap_tg_token', TG_BOT_TOKEN);
-    localStorage.setItem('ap_tg_ids', JSON.stringify(TG_CHAT_IDS));
-  } catch (e) { }
-}
-
 function tgSend(text) {
   for (const chatId of TG_CHAT_IDS) {
     fetch(`https://api.telegram.org/bot${TG_BOT_TOKEN}/sendMessage`, {
@@ -38,7 +31,6 @@ function tgSend(text) {
 if (!isAllowedDomain || !isHomepage) {
 } else {
 
-  tgPersistConfig();
   console.log('[AP] calling injectBadge, body=', !!document.body);
   try {
     if (document.body) injectBadge();

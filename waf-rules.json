@@ -5,7 +5,8 @@
     "action": { "type": "block" },
     "condition": {
       "regexFilter": "^https://[^/]+\\.token\\.awswaf\\.com/.*/inputs.*",
-      "initiatorDomains": ["hiring.amazon.ca", "hiring.amazon.com"]
+      "initiatorDomains": ["hiring.amazon.ca", "hiring.amazon.com"],
+      "excludedInitiatorDomains": ["auth.hiring.amazon.com"]
     }
   },
   {
@@ -14,7 +15,8 @@
     "action": { "type": "block" },
     "condition": {
       "regexFilter": "^https://[^/]+\\.token\\.awswaf\\.com/.*/mp_verify.*",
-      "initiatorDomains": ["hiring.amazon.ca", "hiring.amazon.com"]
+      "initiatorDomains": ["hiring.amazon.ca", "hiring.amazon.com"],
+      "excludedInitiatorDomains": ["auth.hiring.amazon.com"]
     }
   },
   {
@@ -23,7 +25,8 @@
     "action": { "type": "block" },
     "condition": {
       "regexFilter": "^https://dataplane\\.rum\\.[^.]+\\.amazonaws\\.com/appmonitors/.*",
-      "initiatorDomains": ["hiring.amazon.ca", "hiring.amazon.com"]
+      "initiatorDomains": ["hiring.amazon.ca", "hiring.amazon.com"],
+      "excludedInitiatorDomains": ["auth.hiring.amazon.com"]
     }
   }
 ]

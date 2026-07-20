@@ -26,18 +26,27 @@
   const dispatch = (name, detail) => window.dispatchEvent(new CustomEvent(name, { detail }));
   let otpRequested = false;
   let completed = false;
+  const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
 
   async function selectCanada() {
-    const toggle = await waitFor('#country-toggle-button', 5000).catch(() => null);
-    if (!toggle || (toggle.innerText || '').trim().toLowerCase() === 'canada') return;
-    toggle.click();
-    const menu = await waitFor('#country-menu', 5000).catch(() => null);
-    if (!menu) return;
-    const option = Array.from(menu.querySelectorAll('li, [role="option"]'))
-      .find(item => (item.innerText || item.textContent || '').trim().toLowerCase() === 'canada');
-    if (option) {
-      option.click();
-      await new Promise(resolve => setTimeout(resolve, 500));
+    // The country selector is often slower after a long idle/relogin cycle.
+    // Keep retrying the same way as the working standalone extension.
+    const initialToggle = await waitFor('#country-toggle-button', 20000).catch(() => null);
+    if (!initialToggle || (initialToggle.innerText || '').trim().toLowerCase() === 'canada') return;
+    for (let attempt = 0; attempt < 15; attempt++) {
+      const toggle = document.querySelector('#country-toggle-button') || initialToggle;
+      if ((toggle.innerText || '').trim().toLowerCase() === 'canada') return;
+      toggle.click();
+      await wait(300);
+      const menu = document.querySelector('#country-menu');
+      const option = menu && Array.from(menu.querySelectorAll('li, [role="option"]'))
+        .find(item => (item.innerText || item.textContent || '').trim().toLowerCase() === 'canada');
+      if (option) {
+        option.click();
+        await wait(500);
+        return;
+      }
+      await wait(300);
     }
   }
 

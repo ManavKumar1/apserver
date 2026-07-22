@@ -109,15 +109,18 @@ if (!isAllowedDomain || !isHomepage) {
           locale,
           country,
           keyWords: "",
-          equalFilters: [{ key: "scheduleRequiredLanguage", val: locale }],
           containFilters: [{ key: "isPrivateSchedule", val: ["false", "true"] }],
+          geoQueryClause: {lat: 51.045113, lng: -114.057141, unit: "km", distance: 100},
+          // we dont actually need these
+          equalFilters: [{ key: "scheduleRequiredLanguage", val: locale }],
           rangeFilters: [{ key: "hoursPerWeek", range: { minimum: 0, maximum: 80 } }],
+          orFilters: [],
+
           // Fresh date on every API request; avoids a stale midnight filter.
           dateFilters: [{ key: 'firstDayOnSite', range: { startDate: requestDate() } }],
-          orFilters: [],
           sorters: [{ fieldName: 'totalPayRateMax', ascending: 'false' }],
-          pageSize: 1000,
-          consolidateSchedule: true,
+          pageSize: 100,
+          // consolidateSchedule: true,
         }
       },
       query: `query searchJobCardsByLocation($searchJobRequest: SearchJobRequest!) {

@@ -112,13 +112,14 @@ if (!isAllowedDomain || !isHomepage) {
           containFilters: [{ key: "isPrivateSchedule", val: ["false", "true"] }],
           geoQueryClause: {lat: 51.045113, lng: -114.057141, unit: "km", distance: 100},
           // we dont actually need these
-          equalFilters: [{ key: "scheduleRequiredLanguage", val: locale }],
-          rangeFilters: [{ key: "hoursPerWeek", range: { minimum: 0, maximum: 80 } }],
-          orFilters: [],
+          
+          // equalFilters: [{ key: "scheduleRequiredLanguage", val: locale }],
+          // rangeFilters: [{ key: "hoursPerWeek", range: { minimum: 0, maximum: 80 } }],
+          // orFilters: [],
+          // sorters: [{ fieldName: 'totalPayRateMax', ascending: 'false' }],
+          // dateFilters: [{ key: 'firstDayOnSite', range: { startDate: requestDate() } }],
 
           // Fresh date on every API request; avoids a stale midnight filter.
-          dateFilters: [{ key: 'firstDayOnSite', range: { startDate: requestDate() } }],
-          sorters: [{ fieldName: 'totalPayRateMax', ascending: 'false' }],
           pageSize: 100,
           // consolidateSchedule: true,
         }

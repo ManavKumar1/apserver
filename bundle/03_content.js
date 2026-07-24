@@ -110,7 +110,7 @@ if (!isAllowedDomain || !isHomepage) {
           country,
           keyWords: "",
           containFilters: [{ key: "isPrivateSchedule", val: ["false", "true"] }],
-          geoQueryClause: {lat: 51.045113, lng: -114.057141, unit: "km", distance: 100},
+          // geoQueryClause: {lat: 51.045113, lng: -114.057141, unit: "km", distance: 100},
           // we dont actually need these
           
           // equalFilters: [{ key: "scheduleRequiredLanguage", val: locale }],

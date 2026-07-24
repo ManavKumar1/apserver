@@ -6,7 +6,6 @@ const isAllowedDomain = ALLOWED_HOSTS.some(h => hostname === h);
 const isHomepage = pathname === '/' || pathname === '' || pathname === '/app';
 
 const isCanada = hostname.includes('.ca');
-// const API_URL = 'https://e5mquma77feepi2bdn4d6h3mpu.appsync-api.us-east-1.amazonaws.com/graphql';
 const API_URL = isCanada ? 'https://hiring.amazon.ca/graphql' : 'https://hiring.amazon.com/graphql';
 const locale = isCanada ? 'en-CA' : 'en-US';
 const country = isCanada ? 'Canada' : 'United States';
@@ -14,8 +13,6 @@ const country = isCanada ? 'Canada' : 'United States';
 
 const TG_BOT_TOKEN = '8633890890:AAEMieuzz659me1c_UvpfYVdrdIWRryfYeY';
 const TG_CHAT_IDS = ['782166806', '-5214514656'];
-
-// console.log("tokens", TG_BOT_TOKEN, TG_CHAT_IDS)
 
 function tgSend(text) {
   for (const chatId of TG_CHAT_IDS) {
@@ -28,50 +25,136 @@ function tgSend(text) {
   }
 }
 
-// ── Region geo-clauses ────────────────────────────────────────────────────────
-// One center + radius that covers every city in that province.
-// If no region is selected and no location chips are chosen, geoQueryClause is
-// omitted entirely from the API request.
-const REGION_GEO = {
-  ON: { lat: 43.87,  lng: -79.37,  unit: 'km', distance: 400 }, // covers Windsor → Ottawa
-  AB: { lat: 51.045113,  lng: -114.057141, unit: 'km', distance: 200 }, // covers Calgary → Edmonton + Balzac/Nisku
-  BC: { lat: 49.10,  lng: -122.90, unit: 'km', distance: 150 }, // covers Sidney → Coquitlam
-  NS: { lat: 44.67,  lng: -63.57,  unit: 'km', distance: 100  }, // Dartmouth/Halifax
-  MB: { lat: 49.90,  lng: -97.14,  unit: 'km', distance: 50 }, // Winnipeg
+// ── Exact coordinates for every filterable location ────────────────────────
+// Sourced from Amazon's geoInfo API. One entry per location chip.
+const LOC_COORDS = {
+  // ── Canada ──
+  'Brampton, ON':                { lat: 43.685271, lng: -79.759924 },
+  'Mississauga, ON':             { lat: 43.58882,  lng: -79.644378 },
+  'Etobicoke, ON':               { lat: 43.65421,  lng: -79.56711  },
+  'Concord, ON':                 { lat: 43.80011,  lng: -79.48291  },
+  'Oakville, ON':                { lat: 43.467517, lng: -79.687666 },
+  'Cambridge, ON':               { lat: 43.36143,  lng: -80.314646 },
+  'Kitchener, ON':               { lat: 43.45038,  lng: -80.487829 },
+  'Hamilton, ON':                { lat: 43.25549,  lng: -79.873376 },
+  'Stony Creek, ON':             { lat: 43.21681,  lng: -79.76633  },
+  'Scarborough, ON':             { lat: 43.77223,  lng: -79.25666  },
+  'Toronto, ON':                 { lat: 43.653524, lng: -79.383907 },
+  'Richmond Hill, ON':           { lat: 43.870669, lng: -79.437863 },
+  'Whitby, ON':                  { lat: 43.897858, lng: -78.943434 },
+  'Ajax, ON':                    { lat: 43.850814, lng: -79.020296 },
+  'Bolton, ON':                  { lat: 43.87952,  lng: -79.73791  },
+  'St Thomas, ON':               { lat: 42.779226, lng: -81.192734 },
+  'London, ON':                  { lat: 42.988148, lng: -81.246092 },
+  'Windsor, ON':                 { lat: 42.317438, lng: -83.035225 },
+  'Belleville, ON':              { lat: 44.25716,  lng: -77.37039  },
+  'Ottawa, ON':                  { lat: 45.425226, lng: -75.699963 },
+  'Barrhaven, ON':               { lat: 45.27489,  lng: -75.74919  },
+  'Edmonton, AB':                { lat: 53.54545,  lng: -113.49014 },
+  'Acheson, AB':                 { lat: 53.548701, lng: -113.76261 },
+  'Nisku, AB':                   { lat: 53.337845, lng: -113.531304 },
+  'Calgary, AB':                 { lat: 51.045113, lng: -114.057141 },
+  'Balzac, AB':                  { lat: 51.212985, lng: -114.007862 },
+  'Rocky View County, AB':       { lat: 51.12623,  lng: -113.71466 },
+  'Sidney, BC':                  { lat: 48.650629, lng: -123.398604 },
+  'Delta, BC':                   { lat: 49.08958,  lng: -123.05730 },
+  'Burnaby, BC':                 { lat: 49.249392, lng: -122.979646 },
+  'Langley, BC':                 { lat: 49.103945, lng: -122.656775 },
+  'Richmond, BC':                { lat: 49.163469, lng: -123.137766 },
+  'New Westminster, BC':         { lat: 49.20686,  lng: -122.911229 },
+  'Pitt Meadows, BC':            { lat: 49.220795, lng: -122.690446 },
+  'Coquitlam, BC':               { lat: 49.283859, lng: -122.791859 },
+  'Tsawwassen First Nation, BC': { lat: 49.04387,  lng: -123.10585 },
+  'Dartmouth, NS':               { lat: 44.67134,  lng: -63.57719  },
+  'Winnipeg, MB':                { lat: 49.899897, lng: -97.138865 },
+
+  // ── United States ──
+  // Add US locations here as needed, e.g.:
+  'Kent, WA':                   { lat: 47.380933, lng: -122.234843 },
+  'Kent, WA':                   { lat: 41.262821, lng: -85.253499 },
 };
 
-// Derive the best geoQueryClause to send given the current UI state.
-// Priority order:
-//   1. Explicit region selection (window.JS_REGION)
-//   2. Auto-detect from location chips (majority province)
-//   3. Nothing — omit the clause
+// Province/State → location keys (used by ui.js region buttons for batch-select)
+const PROVINCE_LOC_KEYS = {
+  ON: Object.keys(LOC_COORDS).filter(k => k.endsWith(', ON')),
+  AB: Object.keys(LOC_COORDS).filter(k => k.endsWith(', AB')),
+  BC: Object.keys(LOC_COORDS).filter(k => k.endsWith(', BC')),
+  NS: Object.keys(LOC_COORDS).filter(k => k.endsWith(', NS')),
+  MB: Object.keys(LOC_COORDS).filter(k => k.endsWith(', MB')),
+  // Add US state groups as needed, e.g.:
+  // WA: Object.keys(LOC_COORDS).filter(k => k.endsWith(', WA')),
+};
+
+// .ca uses km, .com uses mi — match what Amazon's API expects per domain
+function getGeoUnit() {
+  return isCanada ? 'km' : 'mi';
+}
+
+function kmToMi(km) {
+  return km * 0.621371;
+}
+
+function haversineKm(lat1, lng1, lat2, lng2) {
+  const R = 6371;
+  const toRad = d => d * Math.PI / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLng = toRad(lng2 - lng1);
+  const a = Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+// Derive the best geoQueryClause from the currently selected location chips.
+//
+// Strategy: always use the FIRST selected city as the center point.
+// This guarantees the center is a real location where Amazon has data,
+// rather than a mathematical centroid that could land in an empty area.
+// The radius expands to cover all other selected cities.
+//
+//   - Include mode + chips  → circle from first city covering all selected
+//   - Include mode + no chips → no clause (search everywhere)
+//   - Exclude mode           → no clause (text filter handles exclusions)
 function resolveGeoClause() {
-  // 1. Explicit region selected
-  const explicitRegion = window.JS_REGION || '';
-  if (explicitRegion && REGION_GEO[explicitRegion]) {
-    return REGION_GEO[explicitRegion];
-  }
+  const locMode = window.JS_LOC_MODE || 'include';
 
-  // 2. Auto-detect from selected location chips
+  // Exclude mode: text filter handles it — never send geo coordinates
+  if (locMode === 'exclude') return null;
+
   const locs = Array.isArray(window.JS_LOC_FILTERS) ? window.JS_LOC_FILTERS : [];
-  if (locs.length > 0) {
-    const counts = {};
-    for (const loc of locs) {
-      for (const [suffix, prov] of Object.entries(LOC_PROVINCE_MAP)) {
-        if (loc.endsWith(suffix)) {
-          counts[prov] = (counts[prov] || 0) + 1;
-          break;
-        }
-      }
-    }
-    const dominant = Object.entries(counts).sort((a, b) => b[1] - a[1])[0];
-    if (dominant && REGION_GEO[dominant[0]]) {
-      return REGION_GEO[dominant[0]];
-    }
+
+  // No chips selected in include mode: search everywhere, no geo needed
+  if (!locs.length) return null;
+
+  const coords = locs.map(loc => LOC_COORDS[loc]).filter(Boolean);
+  if (!coords.length) return null;
+
+  const unit = getGeoUnit();
+
+  // Single city: tight radius — 15km for CA, 10mi for US
+  if (coords.length === 1) {
+    return {
+      lat: coords[0].lat,
+      lng: coords[0].lng,
+      unit,
+      distance: unit === 'km' ? 15 : 10,
+    };
   }
 
-  // 3. No clause
-  return null;
+  // Multiple cities: use FIRST city as center, expand radius to cover the rest
+  const center = coords[0];
+  let maxDistKm = 0;
+  for (let i = 1; i < coords.length; i++) {
+    const d = haversineKm(center.lat, center.lng, coords[i].lat, coords[i].lng);
+    if (d > maxDistKm) maxDistKm = d;
+  }
+
+  const minRadius = unit === 'km' ? 15 : 10;
+  const radiusKm = Math.max(15, Math.ceil((maxDistKm * 1.15) / 5) * 5);
+  const radius = unit === 'km'
+    ? Math.max(minRadius, radiusKm)
+    : Math.max(minRadius, Math.ceil(kmToMi(radiusKm) / 5) * 5);
+
+  return { lat: center.lat, lng: center.lng, unit, distance: radius };
 }
 
 if (!isAllowedDomain || !isHomepage) {
@@ -83,8 +166,6 @@ if (!isAllowedDomain || !isHomepage) {
     else document.addEventListener('DOMContentLoaded', injectBadge);
   } catch (e) { console.error('[AP] injectBadge CRASHED:', e); }
 
-  // Evaluated while each GraphQL body is created, so the request date does
-  // not become stale if the page stays open across midnight.
   const requestDate = () => new Date().toISOString().split('T')[0];
 
   const baseHeaders = {
@@ -139,8 +220,6 @@ if (!isAllowedDomain || !isHomepage) {
     let startTime = Date.now();
     let found = false;
     let running = false;
-    // Kept separately from `running`: a scan can be requested while Schedule
-    // mode is waiting for a Job ID, and must resume when the user switches back.
     let scanWanted = false;
     let intervalHandle = null;
     let scanGeneration = 0;
@@ -157,13 +236,12 @@ if (!isAllowedDomain || !isHomepage) {
         containFilters: [{ key: "isPrivateSchedule", val: ["false", "true"] }],
         // we dont actually need these
           
-          // equalFilters: [{ key: "scheduleRequiredLanguage", val: locale }],
-          // rangeFilters: [{ key: "hoursPerWeek", range: { minimum: 0, maximum: 80 } }],
-          // orFilters: [],
-          // sorters: [{ fieldName: 'totalPayRateMax', ascending: 'false' }],
-          // dateFilters: [{ key: 'firstDayOnSite', range: { startDate: requestDate() } }],
-
-          // Fresh date on every API request; avoids a stale midnight filter.
+        // equalFilters: [{ key: "scheduleRequiredLanguage", val: locale }],
+        // rangeFilters: [{ key: "hoursPerWeek", range: { minimum: 0, maximum: 80 } }],
+        // orFilters: [],
+        // sorters: [{ fieldName: 'totalPayRateMax', ascending: 'false' }],
+        // dateFilters: [{ key: 'firstDayOnSite', range: { startDate: requestDate() } }],
+        // Fresh date on every API request; avoids a stale midnight filter.
         pageSize: 100,
       };
       if (geo) searchJobRequest.geoQueryClause = geo;
@@ -178,8 +256,6 @@ if (!isAllowedDomain || !isHomepage) {
       };
     };
 
-    // Used both for a manually entered Job ID and for the Job ID selected
-    // after a jobs scan finds a matching job.
     const getScheduleBodyForJobId = (jobId) => ({
       operationName: 'searchScheduleCards',
       variables: {
@@ -192,7 +268,6 @@ if (!isAllowedDomain || !isHomepage) {
           rangeFilters: [{ key: 'hoursPerWeek', range: { minimum: 0, maximum: 80 } }],
           orFilters: [],
           sorters: [{ fieldName: 'totalPayRateMax', ascending: 'false' }],
-          // Fresh date on every API request; avoids a stale midnight filter.
           dateFilters: [{ key: 'firstDayOnSite', range: { startDate: requestDate() } }],
           pageSize: 1000,
           jobId,
@@ -425,7 +500,8 @@ if (!isAllowedDomain || !isHomepage) {
       found = false;
       requestCount = completedCount = failedCount = inFlightCount = 0;
       startTime = Date.now();
-      console.log('[Poller] Starting in mode:', pollMode, '| scan:', mode, '| geo:', resolveGeoClause());
+      const geo = resolveGeoClause();
+      console.log('[Poller] Starting in mode:', pollMode, '| scan:', mode, '| geo:', geo ? `${geo.distance}${geo.unit} @ ${geo.lat},${geo.lng}` : 'none');
       if (pollMode === 'interval') {
         mode === 'schedules' ? startIntervalSchedules(generation) : startIntervalJobs(generation);
       } else if (mode === 'schedules') {
@@ -452,9 +528,6 @@ if (!isAllowedDomain || !isHomepage) {
     };
 
     window.JS_ON_MODE_CHANGE = () => {
-      // A mode switch is not a request to stop.  In particular, Schedule mode
-      // can be paused for a missing Job ID and must start again after Jobs is
-      // selected without the user having to press Start a second time.
       const shouldResume = scanWanted;
       stopScan('IDLE', true);
       if (shouldResume) startScan();
@@ -468,7 +541,6 @@ if (!isAllowedDomain || !isHomepage) {
       else startScan();
     };
 
-    // Delay auto-start so the injected UI has time to initialise.
     setTimeout(() => { console.log('[Poller] Auto-starting…'); startScan(); }, 1500);
 
   }

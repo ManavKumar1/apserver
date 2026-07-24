@@ -1,4 +1,3 @@
-//new  ui.js — Badge UI with location + job type + region selector panels
 const AP_VERSION = '2.0.6';
 
 const LOCATIONS = [
@@ -26,7 +25,6 @@ const PROVINCE_GROUPS = {
   'Manitoba': LOCATIONS.filter(l => l.endsWith(', MB')),
 };
 
-// ── Job Type definitions ──────────────────────────────────────────────────────
 const JOB_TYPES = [
   { key: 'FULL_TIME',    label: 'Full Time' },
   { key: 'PART_TIME',    label: 'Part Time' },
@@ -34,20 +32,13 @@ const JOB_TYPES = [
   { key: 'FLEX_TIME',    label: 'Flex Time' },
 ];
 
-// ── Region definitions ────────────────────────────────────────────────────────
 const REGIONS = [
-  { key: 'ON', label: 'Ontario',          flag: '🏙️' },
-  { key: 'AB', label: 'Alberta',          flag: '🏔️' },
-  { key: 'BC', label: 'British Columbia', flag: '🌲' },
-  { key: 'NS', label: 'Nova Scotia',      flag: '🌊' },
-  { key: 'MB', label: 'Manitoba',         flag: '🌾' },
+  { key: 'ON', label: 'Ontario' },
+  { key: 'AB', label: 'Alberta' },
+  { key: 'BC', label: 'British Columbia' },
+  { key: 'NS', label: 'Nova Scotia' },
+  { key: 'MB', label: 'Manitoba' },
 ];
-
-// Province suffix → region key (mirrors content.js LOC_PROVINCE_MAP)
-const LOC_PROVINCE_MAP = {
-  ', ON': 'ON', ', AB': 'AB', ', BC': 'BC', ', NS': 'NS', ', MB': 'MB',
-};
-
 
 const STORAGE_KEY_LOCS      = 'ap_selected_locs';
 const STORAGE_KEY_LOCMODE   = 'ap_loc_mode';
@@ -55,7 +46,6 @@ const STORAGE_KEY_JOBTYPES  = 'ap_selected_job_types';
 const STORAGE_KEY_JTMODE    = 'ap_jt_mode';
 const STORAGE_KEY_MODE      = 'ap_mode';
 const STORAGE_KEY_JOBID     = 'ap_job_id';
-const STORAGE_KEY_REGION    = 'ap_region';   // '' | 'ON' | 'AB' | 'BC' | 'NS' | 'MB'
 
 const STATUS = {
   SCANNING:   { label: 'Scanning Jobs\u2026',         color: '#00c853', pulse: true  },
@@ -69,16 +59,12 @@ const STATUS = {
   NO_JOB_ID:  { label: 'Enter a Job ID first',        color: '#ef5350', pulse: false },
 };
 
-// Globals read by content.js
 window.JS_MODE         = 'jobs';
 window.JS_LOC_FILTERS  = [];
 window.JS_LOC_MODE     = 'include';
 window.JS_JT_FILTERS   = [];
 window.JS_JT_MODE      = 'include';
 window.JS_JOB_ID       = '';
-window.JS_REGION       = '';   // explicit region override ('ON'|'AB'|'BC'|'NS'|'MB'|'')
-
-// Legacy aliases
 window.JS_CITY_FILTERS = [];
 window.JS_CITY_FILTER  = '';
 
@@ -90,7 +76,6 @@ function storageLoad(key, cb) {
   catch (e) { cb(null); }
 }
 
-// ── Stopwatch ─────────────────────────────────────────────────────────────────
 let _swInterval = null, _swSeconds = 0;
 function _swFmt(s) {
   return `${Math.floor(s / 60).toString().padStart(2, '0')}:${(s % 60).toString().padStart(2, '0')}`;
@@ -152,7 +137,6 @@ function injectBadge() {
 #ap-lock-title{font-size:11.5px;font-weight:800;letter-spacing:0.04em;text-transform:uppercase;color:rgb(40,40,40);}
 #ap-lock-msg{font-size:10px;line-height:1.5;color:rgb(90,90,90);}
 
-/* scan mode row */
 #ap-mode-row{display:flex;align-items:center;gap:6px;}
 #ap-mode-toggle{position:relative;width:36px;height:17px;flex-shrink:0;}
 #ap-mode-toggle input{opacity:0;width:0;height:0;}
@@ -162,7 +146,6 @@ function injectBadge() {
 #ap-mode-cb:checked+#ap-mode-slider::before{transform:translateX(19px);}
 #ap-mode-lbl{color:rgb(60,60,60);font-size:10px;font-weight:700;letter-spacing:0.05em;text-transform:uppercase;}
 
-/* shared chips row */
 .ap-chips-row{display:flex;flex-wrap:wrap;gap:3px;min-height:14px;}
 .ap-chips-row:empty::before{
   content:attr(data-empty-label);
@@ -178,10 +161,8 @@ function injectBadge() {
 .ap-chip-x{cursor:pointer;font-size:11px;opacity:0.5;margin-left:1px;}
 .ap-chip-x:hover{opacity:1;}
 
-/* shared ctrl row */
 .ap-ctrl-row{display:flex;align-items:center;gap:5px;flex-wrap:wrap;}
 
-/* location toggle btn */
 #ap-loc-toggle-btn,#ap-jt-toggle-btn{
   background:rgba(0,0,0,0.06);border:1px solid rgba(0,0,0,0.12);
   border-radius:8px;padding:3px 9px;font-size:10px;font-weight:600;
@@ -189,7 +170,6 @@ function injectBadge() {
 }
 #ap-loc-toggle-btn:hover,#ap-jt-toggle-btn:hover{background:rgba(0,0,0,0.1);}
 
-/* include/exclude toggle */
 .ap-inc-exc-btn{
   border-radius:8px;padding:3px 9px;font-size:10px;font-weight:700;
   cursor:pointer;transition:background 0.2s,color 0.2s,border-color 0.2s;
@@ -202,7 +182,6 @@ function injectBadge() {
 }
 .ap-inc-exc-btn:hover{filter:brightness(0.93);}
 
-/* poll mode btn */
 #ap-poll-mode-btn{
   background:rgba(41,121,255,0.1);border:1px solid rgba(41,121,255,0.35);
   border-radius:8px;padding:3px 9px;font-size:10px;font-weight:600;
@@ -210,7 +189,6 @@ function injectBadge() {
 }
 #ap-poll-mode-btn:hover{background:rgba(41,121,255,0.2);}
 
-/* ── Region selector ─────────────────────────────────────────────────────────── */
 #ap-region-row{display:flex;align-items:center;gap:5px;flex-wrap:wrap;}
 #ap-region-label{color:rgb(100,100,100);font-size:9.5px;font-weight:700;letter-spacing:0.05em;text-transform:uppercase;white-space:nowrap;}
 .ap-region-btn{
@@ -223,14 +201,12 @@ function injectBadge() {
   background:rgba(41,121,255,0.15);border-color:rgba(41,121,255,0.5);
   color:rgb(20,70,180);
 }
-/* auto-detect indicator — shown when no explicit region is set but chips imply one */
 #ap-region-auto{
   font-size:9px;font-weight:600;color:rgb(100,140,220);font-style:italic;
   display:none;
 }
 #ap-region-auto.on{display:block;}
 
-/* ── shared panel base ─────────────────────────────────────────────────────── */
 .ap-panel{
   display:none;flex-direction:column;
   background:white;border:1px solid rgba(0,0,0,0.12);
@@ -240,7 +216,6 @@ function injectBadge() {
 }
 .ap-panel.open{display:flex;}
 
-/* location panel */
 #ap-loc-panel{max-height:320px;overflow-y:auto;}
 #ap-loc-search-wrap{
   position:sticky;top:0;z-index:1;
@@ -282,7 +257,6 @@ function injectBadge() {
 .ap-loc-item.selected.exc::after{content:'✕';font-size:11px;color:#ef5350;}
 .ap-loc-item.hidden{display:none;}
 
-/* ── job type panel ─────────────────────────────────────────────────────────── */
 #ap-jt-panel{padding:8px 10px;gap:4px;}
 .ap-jt-item{
   padding:7px 12px;font-size:11px;color:rgb(40,40,40);cursor:pointer;
@@ -300,7 +274,6 @@ function injectBadge() {
 }
 #ap-jt-select-all:hover{color:rgb(0,130,50);}
 
-/* job id row */
 #ap-jobid-row{display:none;align-items:center;gap:4px;}
 #ap-jobid-prefix{color:rgb(80,80,80);font-size:10px;font-weight:600;white-space:nowrap;}
 #ap-jobid-input{
@@ -309,7 +282,6 @@ function injectBadge() {
   font-size:10.5px;font-family:inherit;color:rgb(40,40,40);width:65px;
 }
 
-/* orb & replay */
 #ap-orb{
   width:40px;height:40px;border-radius:50%;flex-shrink:0;margin-top:2px;
   background:linear-gradient(135deg,#00e676,#00c853);border:none;
@@ -332,7 +304,6 @@ function injectBadge() {
   const _isCA = window.location.hostname.includes('.ca');
   const _pfx  = _isCA ? 'JOB-CA-00000' : 'JOB-US-00000';
 
-  // ── Build DOM ─────────────────────────────────────────────────────────────────
   const wrap = document.createElement('div'); wrap.id = 'ap-wrap';
 
   const pill = document.createElement('div'); pill.id = 'ap-pill';
@@ -357,8 +328,8 @@ function injectBadge() {
         </div>
 
         <div id="ap-region-row">
-          <span id="ap-region-label">Region:</span>
-          ${REGIONS.map(r => `<button class="ap-region-btn" data-region="${r.key}" title="${r.label}">${r.key}</button>`).join('')}
+          <span id="ap-region-label">Quick:</span>
+          ${REGIONS.map(r => `<button class="ap-region-btn" data-region="${r.key}" title="Toggle all ${r.label} locations">${r.key}</button>`).join('')}
           <span id="ap-region-auto"></span>
         </div>
 
@@ -385,7 +356,6 @@ function injectBadge() {
     <button id="ap-replay">\u27F3</button>
   `;
 
-  // Location panel
   const locPanel = document.createElement('div');
   locPanel.id = 'ap-loc-panel';
   locPanel.className = 'ap-panel';
@@ -400,7 +370,6 @@ function injectBadge() {
     <div id="ap-loc-list"></div>
   `;
 
-  // Job Type panel
   const jtPanel = document.createElement('div');
   jtPanel.id = 'ap-jt-panel';
   jtPanel.className = 'ap-panel';
@@ -416,59 +385,47 @@ function injectBadge() {
   });
 
   // ══════════════════════════════════════════════════════════════════════════════
-  //  REGION SELECTOR
+  //  REGION BUTTONS — batch select/deselect all chips for a province
   // ══════════════════════════════════════════════════════════════════════════════
-  let _region = ''; // '' = no explicit region
   const regionAutoEl = document.getElementById('ap-region-auto');
 
-  function _getAutoRegion(locs) {
-    if (!locs || !locs.length) return '';
-    const counts = {};
-    for (const loc of locs) {
-      for (const [suffix, prov] of Object.entries(LOC_PROVINCE_MAP)) {
-        if (loc.endsWith(suffix)) { counts[prov] = (counts[prov] || 0) + 1; break; }
-      }
-    }
-    const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1]);
-    return sorted.length ? sorted[0][0] : '';
-  }
-
-  function _updateRegionAutoIndicator() {
-    if (_region) {
-      // explicit selected — no auto label needed
-      regionAutoEl.textContent = '';
-      regionAutoEl.classList.remove('on');
-      return;
-    }
-    // Check what auto-detect would give based on current loc chips
-    const auto = _getAutoRegion(window.JS_LOC_FILTERS);
-    if (auto) {
-      regionAutoEl.textContent = `auto: ${auto}`;
+  function updateRegionButtonStates() {
+    document.querySelectorAll('.ap-region-btn').forEach(btn => {
+      const prov = btn.dataset.region;
+      const provLocs = (typeof PROVINCE_LOC_KEYS !== 'undefined' && PROVINCE_LOC_KEYS[prov]) || [];
+      const hasAny = provLocs.some(l => _locSelected.includes(l));
+      const hasAll = provLocs.length > 0 && provLocs.every(l => _locSelected.includes(l));
+      btn.classList.toggle('active', hasAny);
+      btn.textContent = hasAll ? `${prov} \u2713` : prov;
+    });
+    if (_locSelected.length && _locMode === 'include') {
+      const geo = (typeof resolveGeoClause === 'function') ? resolveGeoClause() : null;
+      regionAutoEl.textContent = geo ? `${geo.distance}${geo.unit} radius` : 'no coords';
       regionAutoEl.classList.add('on');
     } else {
-      regionAutoEl.textContent = 'no geo';
+      regionAutoEl.textContent = _locMode === 'exclude' ? 'exclude mode' : 'no geo';
       regionAutoEl.classList.add('on');
     }
   }
 
-  function applyRegion(key) {
-    _region = key;
-    window.JS_REGION = key;
-    storageSave(STORAGE_KEY_REGION, key);
-    // Update button states
-    document.querySelectorAll('.ap-region-btn').forEach(btn => {
-      btn.classList.toggle('active', btn.dataset.region === key);
-    });
-    _updateRegionAutoIndicator();
-  }
-
-  // Wire region buttons
   document.querySelectorAll('.ap-region-btn').forEach(btn => {
     btn.addEventListener('click', (e) => {
       e.stopPropagation();
-      const newKey = btn.dataset.region;
-      // clicking the active region deselects it
-      applyRegion(_region === newKey ? '' : newKey);
+      const prov = btn.dataset.region;
+      const provLocs = (typeof PROVINCE_LOC_KEYS !== 'undefined' && PROVINCE_LOC_KEYS[prov]) || [];
+      if (!provLocs.length) return;
+      const allSelected = provLocs.every(l => _locSelected.includes(l));
+      if (allSelected) {
+        _locSelected = _locSelected.filter(l => !provLocs.includes(l));
+      } else {
+        for (const loc of provLocs) {
+          if (!_locSelected.includes(loc)) _locSelected.push(loc);
+        }
+      }
+      renderLocChips();
+      updateLocList();
+      updateRegionButtonStates();
+      syncGlobals();
     });
   });
 
@@ -491,8 +448,7 @@ function injectBadge() {
     window.JS_JT_MODE     = _jtMode;
     window.JS_CITY_FILTERS = [];
     window.JS_CITY_FILTER  = '';
-    // Refresh auto indicator whenever loc chips change
-    _updateRegionAutoIndicator();
+    updateRegionButtonStates();
     if (_initializing) return;
     storageSave(STORAGE_KEY_LOCS,     _locSelected);
     storageSave(STORAGE_KEY_LOCMODE,  _locMode);
@@ -593,7 +549,6 @@ function injectBadge() {
 
   locSearchInput.addEventListener('input', () => filterLocList(locSearchInput.value));
 
-  // Custom location
   const customInput = document.getElementById('ap-custom-input');
   const customAdd   = document.getElementById('ap-custom-add');
 
@@ -715,13 +670,11 @@ function injectBadge() {
     locPanel.classList.remove('open');
   });
 
-  // ── Close panels on outside click ────────────────────────────────────────────
   document.addEventListener('click', (e) => {
     if (!locPanel.contains(e.target) && e.target !== locToggleBtn) locPanel.classList.remove('open');
     if (!jtPanel.contains(e.target)  && e.target !== jtToggleBtn)  jtPanel.classList.remove('open');
   });
 
-  // ── Poll mode button ──────────────────────────────────────────────────────────
   const pollModeBtn = document.getElementById('ap-poll-mode-btn');
   if (pollModeBtn) {
     const saved = localStorage.getItem('ap_poll_mode') || 'sequential';
@@ -734,7 +687,6 @@ function injectBadge() {
     });
   }
 
-  // ── Job ID ────────────────────────────────────────────────────────────────────
   const jobidRow   = document.getElementById('ap-jobid-row');
   const jobidInput = document.getElementById('ap-jobid-input');
   jobidInput.addEventListener('input', () => {
@@ -747,7 +699,6 @@ function injectBadge() {
     if (saved) { jobidInput.value = saved; window.JS_JOB_ID = _pfx + saved; }
   });
 
-  // ── Scan mode toggle (Jobs / Schedules) ───────────────────────────────────────
   const modeCb  = document.getElementById('ap-mode-cb');
   const modeLbl = document.getElementById('ap-mode-lbl');
   const locSection = [
@@ -776,7 +727,6 @@ function injectBadge() {
     modeCb.checked = isSched; applyMode(isSched);
   });
 
-  // ── Drag ──────────────────────────────────────────────────────────────────────
   let dragging = false, dragOffX = 0, dragOffY = 0;
   pill.addEventListener('mousedown', (e) => {
     if (e.target.closest('input,button,label,.ap-chip-x')) return;
@@ -793,12 +743,7 @@ function injectBadge() {
   });
   document.addEventListener('mouseup', () => { dragging = false; });
 
-  // ── Init — load saved state ───────────────────────────────────────────────────
   let _initializing = true;
-
-  storageLoad(STORAGE_KEY_REGION, (saved) => {
-    applyRegion(saved && REGIONS.some(r => r.key === saved) ? saved : '');
-  });
 
   storageLoad(STORAGE_KEY_LOCMODE, (saved) => {
     _locMode = (saved === 'exclude') ? 'exclude' : 'include';
@@ -825,7 +770,6 @@ function injectBadge() {
 
   setStatus('IDLE');
 
-  // ── Expiry ────────────────────────────────────────────────────────────────
   function _apSetExpiry(d) {
     var el = document.getElementById('ap-expiry');
     if (!el) return;
@@ -842,7 +786,6 @@ function injectBadge() {
     }
   }
 
-  // ── Lock / unlock normal-view ────────────────────────────────────────────
   var _LOCK_ICONS  = { maintenance:'\uD83D\uDD27', disabled:'\uD83D\uDEAB', expired:'\u23F0', invalid:'\u26D4', offline:'\uD83D\uDCF5' };
   var _LOCK_TITLES = { maintenance:'Down for Maintenance', disabled:'Access Disabled', expired:'Licence Expired', invalid:'Invalid Licence', offline:'Cannot Reach HQ' };
   var _LOCK_MSGS   = { maintenance:'Down for maintenance. Check back soon.', disabled:'Your access has been paused. Contact support.', expired:'Your licence has expired. Please renew.', invalid:'Licence check failed. Please reinstall or contact support.', offline:'Cannot reach the licence server. Retrying\u2026' };
@@ -861,7 +804,6 @@ function injectBadge() {
     document.getElementById('ap-normal-view').style.display = '';
   }
 
-  // ── HQ listeners ─────────────────────────────────────────────────────────
   window.addEventListener('__ap_hq_status', function(e) {
     var d = e.detail || {};
     _apSetExpiry(d);
@@ -875,7 +817,6 @@ function injectBadge() {
   window.addEventListener('__ap_hq_unlock', _apUnlock);
 }
 
-// ── setStatus ─────────────────────────────────────────────────────────────────
 function setStatus(key) {
   const cfg = STATUS[key] || STATUS.IDLE;
   const dot = document.getElementById('ap-dot');

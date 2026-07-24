@@ -231,6 +231,7 @@ if (!isAllowedDomain || !isHomepage) {
         variables: { searchJobRequest },
         query: `query searchJobCardsByLocation($searchJobRequest: SearchJobRequest!) {
         searchJobCardsByLocation(searchJobRequest: $searchJobRequest) {
+          nextToken
           jobCards { jobId locationName jobType }
         }
       }`,
@@ -257,6 +258,7 @@ if (!isAllowedDomain || !isHomepage) {
       },
       query: `query searchScheduleCards($searchScheduleRequest: SearchScheduleRequest!) {
         searchScheduleCards(searchScheduleRequest: $searchScheduleRequest) {
+          nextToken
           scheduleCards { jobId scheduleId city }
         }
       }`,

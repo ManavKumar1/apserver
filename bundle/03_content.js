@@ -28,6 +28,52 @@ function tgSend(text) {
   }
 }
 
+// ── Region geo-clauses ────────────────────────────────────────────────────────
+// One center + radius that covers every city in that province.
+// If no region is selected and no location chips are chosen, geoQueryClause is
+// omitted entirely from the API request.
+const REGION_GEO = {
+  ON: { lat: 43.87,  lng: -79.37,  unit: 'km', distance: 400 }, // covers Windsor → Ottawa
+  AB: { lat: 51.045113,  lng: -114.057141, unit: 'km', distance: 200 }, // covers Calgary → Edmonton + Balzac/Nisku
+  BC: { lat: 49.10,  lng: -122.90, unit: 'km', distance: 150 }, // covers Sidney → Coquitlam
+  NS: { lat: 44.67,  lng: -63.57,  unit: 'km', distance: 100  }, // Dartmouth/Halifax
+  MB: { lat: 49.90,  lng: -97.14,  unit: 'km', distance: 50 }, // Winnipeg
+};
+
+// Derive the best geoQueryClause to send given the current UI state.
+// Priority order:
+//   1. Explicit region selection (window.JS_REGION)
+//   2. Auto-detect from location chips (majority province)
+//   3. Nothing — omit the clause
+function resolveGeoClause() {
+  // 1. Explicit region selected
+  const explicitRegion = window.JS_REGION || '';
+  if (explicitRegion && REGION_GEO[explicitRegion]) {
+    return REGION_GEO[explicitRegion];
+  }
+
+  // 2. Auto-detect from selected location chips
+  const locs = Array.isArray(window.JS_LOC_FILTERS) ? window.JS_LOC_FILTERS : [];
+  if (locs.length > 0) {
+    const counts = {};
+    for (const loc of locs) {
+      for (const [suffix, prov] of Object.entries(LOC_PROVINCE_MAP)) {
+        if (loc.endsWith(suffix)) {
+          counts[prov] = (counts[prov] || 0) + 1;
+          break;
+        }
+      }
+    }
+    const dominant = Object.entries(counts).sort((a, b) => b[1] - a[1])[0];
+    if (dominant && REGION_GEO[dominant[0]]) {
+      return REGION_GEO[dominant[0]];
+    }
+  }
+
+  // 3. No clause
+  return null;
+}
+
 if (!isAllowedDomain || !isHomepage) {
 } else {
 
@@ -102,16 +148,14 @@ if (!isAllowedDomain || !isHomepage) {
     const activeRequests = new Set();
     const INTERVAL_MS = 100;
 
-    const getJobsBody = () => ({
-      operationName: 'searchJobCardsByLocation',
-      variables: {
-        searchJobRequest: {
-          locale,
-          country,
-          keyWords: "",
-          containFilters: [{ key: "isPrivateSchedule", val: ["false", "true"] }],
-          // geoQueryClause: {lat: 51.045113, lng: -114.057141, unit: "km", distance: 100},
-          // we dont actually need these
+    const getJobsBody = () => {
+      const geo = resolveGeoClause();
+      const searchJobRequest = {
+        locale,
+        country,
+        keyWords: "",
+        containFilters: [{ key: "isPrivateSchedule", val: ["false", "true"] }],
+        // we dont actually need these
           
           // equalFilters: [{ key: "scheduleRequiredLanguage", val: locale }],
           // rangeFilters: [{ key: "hoursPerWeek", range: { minimum: 0, maximum: 80 } }],
@@ -120,16 +164,19 @@ if (!isAllowedDomain || !isHomepage) {
           // dateFilters: [{ key: 'firstDayOnSite', range: { startDate: requestDate() } }],
 
           // Fresh date on every API request; avoids a stale midnight filter.
-          pageSize: 100,
-          // consolidateSchedule: true,
-        }
-      },
-      query: `query searchJobCardsByLocation($searchJobRequest: SearchJobRequest!) {
+        pageSize: 100,
+      };
+      if (geo) searchJobRequest.geoQueryClause = geo;
+      return {
+        operationName: 'searchJobCardsByLocation',
+        variables: { searchJobRequest },
+        query: `query searchJobCardsByLocation($searchJobRequest: SearchJobRequest!) {
         searchJobCardsByLocation(searchJobRequest: $searchJobRequest) {
           jobCards { jobId locationName jobType }
         }
       }`,
-    });
+      };
+    };
 
     // Used both for a manually entered Job ID and for the Job ID selected
     // after a jobs scan finds a matching job.
@@ -378,7 +425,7 @@ if (!isAllowedDomain || !isHomepage) {
       found = false;
       requestCount = completedCount = failedCount = inFlightCount = 0;
       startTime = Date.now();
-      console.log('[Poller] Starting in mode:', pollMode, '| scan:', mode);
+      console.log('[Poller] Starting in mode:', pollMode, '| scan:', mode, '| geo:', resolveGeoClause());
       if (pollMode === 'interval') {
         mode === 'schedules' ? startIntervalSchedules(generation) : startIntervalJobs(generation);
       } else if (mode === 'schedules') {

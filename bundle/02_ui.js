@@ -1,4 +1,4 @@
-// ui.js — Badge UI with location + job type selector panels
+//new  ui.js — Badge UI with location + job type + region selector panels
 const AP_VERSION = '2.0.6';
 
 const LOCATIONS = [
@@ -27,7 +27,6 @@ const PROVINCE_GROUPS = {
 };
 
 // ── Job Type definitions ──────────────────────────────────────────────────────
-// Keys match what the API returns inside the semicolon-delimited jobType field.
 const JOB_TYPES = [
   { key: 'FULL_TIME',    label: 'Full Time' },
   { key: 'PART_TIME',    label: 'Part Time' },
@@ -35,12 +34,28 @@ const JOB_TYPES = [
   { key: 'FLEX_TIME',    label: 'Flex Time' },
 ];
 
+// ── Region definitions ────────────────────────────────────────────────────────
+const REGIONS = [
+  { key: 'ON', label: 'Ontario',          flag: '🏙️' },
+  { key: 'AB', label: 'Alberta',          flag: '🏔️' },
+  { key: 'BC', label: 'British Columbia', flag: '🌲' },
+  { key: 'NS', label: 'Nova Scotia',      flag: '🌊' },
+  { key: 'MB', label: 'Manitoba',         flag: '🌾' },
+];
+
+// Province suffix → region key (mirrors content.js LOC_PROVINCE_MAP)
+const LOC_PROVINCE_MAP = {
+  ', ON': 'ON', ', AB': 'AB', ', BC': 'BC', ', NS': 'NS', ', MB': 'MB',
+};
+
+
 const STORAGE_KEY_LOCS      = 'ap_selected_locs';
-const STORAGE_KEY_LOCMODE   = 'ap_loc_mode';    // 'include' | 'exclude'
+const STORAGE_KEY_LOCMODE   = 'ap_loc_mode';
 const STORAGE_KEY_JOBTYPES  = 'ap_selected_job_types';
-const STORAGE_KEY_JTMODE    = 'ap_jt_mode';     // 'include' | 'exclude'
+const STORAGE_KEY_JTMODE    = 'ap_jt_mode';
 const STORAGE_KEY_MODE      = 'ap_mode';
 const STORAGE_KEY_JOBID     = 'ap_job_id';
+const STORAGE_KEY_REGION    = 'ap_region';   // '' | 'ON' | 'AB' | 'BC' | 'NS' | 'MB'
 
 const STATUS = {
   SCANNING:   { label: 'Scanning Jobs\u2026',         color: '#00c853', pulse: true  },
@@ -56,11 +71,12 @@ const STATUS = {
 
 // Globals read by content.js
 window.JS_MODE         = 'jobs';
-window.JS_LOC_FILTERS  = [];        // selected location strings
-window.JS_LOC_MODE     = 'include'; // 'include' | 'exclude'
-window.JS_JT_FILTERS   = [];        // selected job-type keys  e.g. ['FULL_TIME']
-window.JS_JT_MODE      = 'include'; // 'include' | 'exclude'
+window.JS_LOC_FILTERS  = [];
+window.JS_LOC_MODE     = 'include';
+window.JS_JT_FILTERS   = [];
+window.JS_JT_MODE      = 'include';
 window.JS_JOB_ID       = '';
+window.JS_REGION       = '';   // explicit region override ('ON'|'AB'|'BC'|'NS'|'MB'|'')
 
 // Legacy aliases
 window.JS_CITY_FILTERS = [];
@@ -173,7 +189,7 @@ function injectBadge() {
 }
 #ap-loc-toggle-btn:hover,#ap-jt-toggle-btn:hover{background:rgba(0,0,0,0.1);}
 
-/* include/exclude toggle — shared class .ap-inc-exc-btn */
+/* include/exclude toggle */
 .ap-inc-exc-btn{
   border-radius:8px;padding:3px 9px;font-size:10px;font-weight:700;
   cursor:pointer;transition:background 0.2s,color 0.2s,border-color 0.2s;
@@ -193,6 +209,26 @@ function injectBadge() {
   color:rgb(20,70,180);cursor:pointer;
 }
 #ap-poll-mode-btn:hover{background:rgba(41,121,255,0.2);}
+
+/* ── Region selector ─────────────────────────────────────────────────────────── */
+#ap-region-row{display:flex;align-items:center;gap:5px;flex-wrap:wrap;}
+#ap-region-label{color:rgb(100,100,100);font-size:9.5px;font-weight:700;letter-spacing:0.05em;text-transform:uppercase;white-space:nowrap;}
+.ap-region-btn{
+  border-radius:20px;padding:2px 9px;font-size:9.5px;font-weight:700;
+  cursor:pointer;transition:all 0.15s;white-space:nowrap;
+  background:rgba(0,0,0,0.05);border:1px solid rgba(0,0,0,0.12);color:rgb(80,80,80);
+}
+.ap-region-btn:hover{background:rgba(0,0,0,0.1);}
+.ap-region-btn.active{
+  background:rgba(41,121,255,0.15);border-color:rgba(41,121,255,0.5);
+  color:rgb(20,70,180);
+}
+/* auto-detect indicator — shown when no explicit region is set but chips imply one */
+#ap-region-auto{
+  font-size:9px;font-weight:600;color:rgb(100,140,220);font-style:italic;
+  display:none;
+}
+#ap-region-auto.on{display:block;}
 
 /* ── shared panel base ─────────────────────────────────────────────────────── */
 .ap-panel{
@@ -320,6 +356,12 @@ function injectBadge() {
           <span id="ap-mode-lbl">Poll Jobs</span>
         </div>
 
+        <div id="ap-region-row">
+          <span id="ap-region-label">Region:</span>
+          ${REGIONS.map(r => `<button class="ap-region-btn" data-region="${r.key}" title="${r.label}">${r.key}</button>`).join('')}
+          <span id="ap-region-auto"></span>
+        </div>
+
         <div id="ap-loc-chips-row" class="ap-chips-row" data-empty-label="All locations"></div>
         <div id="ap-loc-ctrl-row" class="ap-ctrl-row">
           <button id="ap-loc-toggle-btn">\u271a Locations</button>
@@ -362,7 +404,6 @@ function injectBadge() {
   const jtPanel = document.createElement('div');
   jtPanel.id = 'ap-jt-panel';
   jtPanel.className = 'ap-panel';
-  // items built dynamically below
 
   wrap.appendChild(pill);
   wrap.appendChild(locPanel);
@@ -375,16 +416,73 @@ function injectBadge() {
   });
 
   // ══════════════════════════════════════════════════════════════════════════════
+  //  REGION SELECTOR
+  // ══════════════════════════════════════════════════════════════════════════════
+  let _region = ''; // '' = no explicit region
+  const regionAutoEl = document.getElementById('ap-region-auto');
+
+  function _getAutoRegion(locs) {
+    if (!locs || !locs.length) return '';
+    const counts = {};
+    for (const loc of locs) {
+      for (const [suffix, prov] of Object.entries(LOC_PROVINCE_MAP)) {
+        if (loc.endsWith(suffix)) { counts[prov] = (counts[prov] || 0) + 1; break; }
+      }
+    }
+    const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1]);
+    return sorted.length ? sorted[0][0] : '';
+  }
+
+  function _updateRegionAutoIndicator() {
+    if (_region) {
+      // explicit selected — no auto label needed
+      regionAutoEl.textContent = '';
+      regionAutoEl.classList.remove('on');
+      return;
+    }
+    // Check what auto-detect would give based on current loc chips
+    const auto = _getAutoRegion(window.JS_LOC_FILTERS);
+    if (auto) {
+      regionAutoEl.textContent = `auto: ${auto}`;
+      regionAutoEl.classList.add('on');
+    } else {
+      regionAutoEl.textContent = 'no geo';
+      regionAutoEl.classList.add('on');
+    }
+  }
+
+  function applyRegion(key) {
+    _region = key;
+    window.JS_REGION = key;
+    storageSave(STORAGE_KEY_REGION, key);
+    // Update button states
+    document.querySelectorAll('.ap-region-btn').forEach(btn => {
+      btn.classList.toggle('active', btn.dataset.region === key);
+    });
+    _updateRegionAutoIndicator();
+  }
+
+  // Wire region buttons
+  document.querySelectorAll('.ap-region-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const newKey = btn.dataset.region;
+      // clicking the active region deselects it
+      applyRegion(_region === newKey ? '' : newKey);
+    });
+  });
+
+  // ══════════════════════════════════════════════════════════════════════════════
   //  LOCATION FILTER
   // ══════════════════════════════════════════════════════════════════════════════
   let _locSelected = [];
   let _locMode     = 'include';
 
-  const locChipsRow   = document.getElementById('ap-loc-chips-row');
-  const locList       = document.getElementById('ap-loc-list');
+  const locChipsRow    = document.getElementById('ap-loc-chips-row');
+  const locList        = document.getElementById('ap-loc-list');
   const locSearchInput = document.getElementById('ap-loc-search-input');
-  const locToggleBtn  = document.getElementById('ap-loc-toggle-btn');
-  const locIncExcBtn  = document.getElementById('ap-loc-inc-exc-btn');
+  const locToggleBtn   = document.getElementById('ap-loc-toggle-btn');
+  const locIncExcBtn   = document.getElementById('ap-loc-inc-exc-btn');
 
   function syncGlobals() {
     window.JS_LOC_FILTERS = [..._locSelected];
@@ -393,6 +491,8 @@ function injectBadge() {
     window.JS_JT_MODE     = _jtMode;
     window.JS_CITY_FILTERS = [];
     window.JS_CITY_FILTER  = '';
+    // Refresh auto indicator whenever loc chips change
+    _updateRegionAutoIndicator();
     if (_initializing) return;
     storageSave(STORAGE_KEY_LOCS,     _locSelected);
     storageSave(STORAGE_KEY_LOCMODE,  _locMode);
@@ -400,7 +500,6 @@ function injectBadge() {
     storageSave(STORAGE_KEY_JTMODE,   _jtMode);
   }
 
-  // chips
   function renderLocChips() {
     locChipsRow.innerHTML = '';
     locChipsRow.dataset.emptyLabel = _locMode === 'include' ? 'All locations' : 'No exclusions';
@@ -488,7 +587,7 @@ function injectBadge() {
     e.stopPropagation();
     const opening = !locPanel.classList.contains('open');
     locPanel.classList.toggle('open');
-    jtPanel.classList.remove('open'); // close the other panel
+    jtPanel.classList.remove('open');
     if (opening) locSearchInput.focus();
   });
 
@@ -549,7 +648,7 @@ function injectBadge() {
   }
 
   function buildJtList() {
-    jtPanel.innerHTML = '';  // clear first
+    jtPanel.innerHTML = '';
     JOB_TYPES.forEach(({ key, label }) => {
       const item = document.createElement('div');
       item.className = 'ap-jt-item';
@@ -568,7 +667,6 @@ function injectBadge() {
       });
       jtPanel.appendChild(item);
     });
-    // Select All / Clear All
     const selectAll = document.createElement('div');
     selectAll.id = 'ap-jt-select-all';
     selectAll.textContent = 'Select All';
@@ -576,7 +674,6 @@ function injectBadge() {
       e.stopPropagation();
       const allKeys = JOB_TYPES.map(t => t.key);
       if (_jtSelected.length === allKeys.length) {
-        // clear
         _jtSelected = [];
         selectAll.textContent = 'Select All';
       } else {
@@ -595,7 +692,6 @@ function injectBadge() {
       item.classList.toggle('inc', sel && _jtMode === 'include');
       item.classList.toggle('exc', sel && _jtMode === 'exclude');
     });
-    // update select-all label
     const sa = document.getElementById('ap-jt-select-all');
     if (sa) sa.textContent = (_jtSelected.length === JOB_TYPES.length) ? 'Clear All' : 'Select All';
   }
@@ -616,7 +712,7 @@ function injectBadge() {
   jtToggleBtn.addEventListener('click', (e) => {
     e.stopPropagation();
     jtPanel.classList.toggle('open');
-    locPanel.classList.remove('open'); // close the other panel
+    locPanel.classList.remove('open');
   });
 
   // ── Close panels on outside click ────────────────────────────────────────────
@@ -659,6 +755,7 @@ function injectBadge() {
     document.getElementById('ap-loc-ctrl-row'),
     jtChipsRow,
     document.getElementById('ap-jt-ctrl-row'),
+    document.getElementById('ap-region-row'),
   ];
 
   function applyMode(isSchedule) {
@@ -698,6 +795,10 @@ function injectBadge() {
 
   // ── Init — load saved state ───────────────────────────────────────────────────
   let _initializing = true;
+
+  storageLoad(STORAGE_KEY_REGION, (saved) => {
+    applyRegion(saved && REGIONS.some(r => r.key === saved) ? saved : '');
+  });
 
   storageLoad(STORAGE_KEY_LOCMODE, (saved) => {
     _locMode = (saved === 'exclude') ? 'exclude' : 'include';
@@ -828,8 +929,6 @@ function resetForRescan() {
 
 window.JS_IS_APPLIED = () => startBtnEl && startBtnEl.style.display === 'flex';
 
-// Keep a short event buffer while the badge is being constructed.  The thin
-// extension owns HQ checks and may send a lock event during this window.
 (function () {
   var _d = null;
   function _s(e) { _d = e.detail || {}; }

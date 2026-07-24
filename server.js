@@ -59,13 +59,35 @@ async function validateLicence(licenceKey) {
 
   const config = JSON.parse(fs.readFileSync(path.join(__dirname, 'hq-config.json'), 'utf8'));
   const endpoint = config.hq_url.replace(/\/+$/, '') + '/' + config.app_slug.replace(/^\/+/, '');
-  const response = await fetch(endpoint, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ licence_key: normalizedKey }),
-    signal: AbortSignal.timeout(10000),
-  });
-  const body = await response.json();
+  
+  let response;
+  try {
+    response = await fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ licence_key: normalizedKey }),
+      signal: AbortSignal.timeout(10000),
+    });
+  } catch (err) {
+    console.error('[Server] HQ unreachable:', err.message);
+    return false;
+  }
+
+  // SAFETY: Read as text first to prevent JSON.parse crash on HTML (e.g. Render cold start 404)
+  const text = await response.text();
+  if (!text.startsWith('{')) {
+    console.error('[Server] HQ returned non-JSON:', response.status, text.substring(0, 80));
+    return false;
+  }
+
+  let body;
+  try {
+    body = JSON.parse(text);
+  } catch (err) {
+    console.error('[Server] HQ returned invalid JSON:', text.substring(0, 80));
+    return false;
+  }
+
   const allowed = response.ok && body.working === true && !body.expired && !body.maintenance;
   hqValidationCache.set(cacheKey, {
     allowed,
@@ -167,6 +189,11 @@ app.get('/waf-rules.json', (req, res) => {
 app.get('/health', (_req, res) => {
   const files = fs.readdirSync(BUNDLE_DIR).filter(f => f.endsWith('.js')).sort();
   res.json({ status: 'ok', files, time: new Date().toISOString() });
+});
+
+// ─── Ping (used by extension to wake up this server on Render free tier) ──────
+app.get('/ping', (_req, res) => {
+  res.status(204).end();
 });
 
 // ─── Start ────────────────────────────────────────────────────────────────────

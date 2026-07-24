@@ -1,4 +1,4 @@
-const AP_VERSION = '2.0.6';
+const AP_VERSION = '2.0.7';
 
 const LOCATIONS = [
   // Ontario
@@ -193,19 +193,14 @@ function injectBadge() {
 #ap-region-label{color:rgb(100,100,100);font-size:9.5px;font-weight:700;letter-spacing:0.05em;text-transform:uppercase;white-space:nowrap;}
 .ap-region-btn{
   border-radius:20px;padding:2px 9px;font-size:9.5px;font-weight:700;
-  cursor:pointer;transition:all 0.15s;white-space:nowrap;
+  white-space:nowrap;
   background:rgba(0,0,0,0.05);border:1px solid rgba(0,0,0,0.12);color:rgb(80,80,80);
+  pointer-events:none;cursor:default;
 }
-.ap-region-btn:hover{background:rgba(0,0,0,0.1);}
 .ap-region-btn.active{
   background:rgba(41,121,255,0.15);border-color:rgba(41,121,255,0.5);
   color:rgb(20,70,180);
 }
-#ap-region-auto{
-  font-size:9px;font-weight:600;color:rgb(100,140,220);font-style:italic;
-  display:none;
-}
-#ap-region-auto.on{display:block;}
 
 .ap-panel{
   display:none;flex-direction:column;
@@ -327,13 +322,11 @@ function injectBadge() {
           <span id="ap-mode-lbl">Poll Jobs</span>
         </div>
 
-        <div id="ap-region-row">
-          <span id="ap-region-label">Quick:</span>
-          ${REGIONS.map(r => `<button class="ap-region-btn" data-region="${r.key}" title="Toggle all ${r.label} locations">${r.key}</button>`).join('')}
-          <span id="ap-region-auto"></span>
-        </div>
-
         <div id="ap-loc-chips-row" class="ap-chips-row" data-empty-label="All locations"></div>
+        <div id="ap-region-row">
+          <span id="ap-region-label">Regions:</span>
+          ${REGIONS.map(r => `<span class="ap-region-btn" data-region="${r.key}">${r.key}</span>`).join('')}
+        </div>
         <div id="ap-loc-ctrl-row" class="ap-ctrl-row">
           <button id="ap-loc-toggle-btn">\u271a Locations</button>
           <button id="ap-loc-inc-exc-btn" class="ap-inc-exc-btn inc">Include</button>
@@ -385,49 +378,17 @@ function injectBadge() {
   });
 
   // ══════════════════════════════════════════════════════════════════════════════
-  //  REGION BUTTONS — batch select/deselect all chips for a province
+  //  REGION INDICATORS — read-only, auto-light based on selected location chips
   // ══════════════════════════════════════════════════════════════════════════════
-  const regionAutoEl = document.getElementById('ap-region-auto');
-
   function updateRegionButtonStates() {
     document.querySelectorAll('.ap-region-btn').forEach(btn => {
       const prov = btn.dataset.region;
       const provLocs = (typeof PROVINCE_LOC_KEYS !== 'undefined' && PROVINCE_LOC_KEYS[prov]) || [];
       const hasAny = provLocs.some(l => _locSelected.includes(l));
-      const hasAll = provLocs.length > 0 && provLocs.every(l => _locSelected.includes(l));
       btn.classList.toggle('active', hasAny);
-      btn.textContent = hasAll ? `${prov} \u2713` : prov;
+      btn.textContent = hasAny ? `${prov} \u2713` : prov;
     });
-    if (_locSelected.length && _locMode === 'include') {
-      const geo = (typeof resolveGeoClause === 'function') ? resolveGeoClause() : null;
-      regionAutoEl.textContent = geo ? `${geo.distance}${geo.unit} radius` : 'no coords';
-      regionAutoEl.classList.add('on');
-    } else {
-      regionAutoEl.textContent = _locMode === 'exclude' ? 'exclude mode' : 'no geo';
-      regionAutoEl.classList.add('on');
-    }
   }
-
-  document.querySelectorAll('.ap-region-btn').forEach(btn => {
-    btn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      const prov = btn.dataset.region;
-      const provLocs = (typeof PROVINCE_LOC_KEYS !== 'undefined' && PROVINCE_LOC_KEYS[prov]) || [];
-      if (!provLocs.length) return;
-      const allSelected = provLocs.every(l => _locSelected.includes(l));
-      if (allSelected) {
-        _locSelected = _locSelected.filter(l => !provLocs.includes(l));
-      } else {
-        for (const loc of provLocs) {
-          if (!_locSelected.includes(loc)) _locSelected.push(loc);
-        }
-      }
-      renderLocChips();
-      updateLocList();
-      updateRegionButtonStates();
-      syncGlobals();
-    });
-  });
 
   // ══════════════════════════════════════════════════════════════════════════════
   //  LOCATION FILTER
@@ -703,10 +664,10 @@ function injectBadge() {
   const modeLbl = document.getElementById('ap-mode-lbl');
   const locSection = [
     locChipsRow,
+    document.getElementById('ap-region-row'),
     document.getElementById('ap-loc-ctrl-row'),
     jtChipsRow,
     document.getElementById('ap-jt-ctrl-row'),
-    document.getElementById('ap-region-row'),
   ];
 
   function applyMode(isSchedule) {

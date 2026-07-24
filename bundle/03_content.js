@@ -26,7 +26,6 @@ function tgSend(text) {
 }
 
 // ── Exact coordinates for every filterable location ────────────────────────
-// Sourced from Amazon's geoInfo API. One entry per location chip.
 const LOC_COORDS = {
   // ── Canada ──
   'Brampton, ON':                { lat: 43.685271, lng: -79.759924 },
@@ -69,23 +68,19 @@ const LOC_COORDS = {
   'Winnipeg, MB':                { lat: 49.899897, lng: -97.138865 },
 
   // ── United States ──
-  // Add US locations here as needed, e.g.:
-  'Kent, WA':                   { lat: 47.380933, lng: -122.234843 },
-  'Kent, WA':                   { lat: 41.262821, lng: -85.253499 },
+  'Kent, WA':                    { lat: 47.380933, lng: -122.234843 },
 };
 
-// Province/State → location keys (used by ui.js region buttons for batch-select)
+// Province/State → location keys (used by ui.js region indicator buttons)
 const PROVINCE_LOC_KEYS = {
   ON: Object.keys(LOC_COORDS).filter(k => k.endsWith(', ON')),
   AB: Object.keys(LOC_COORDS).filter(k => k.endsWith(', AB')),
   BC: Object.keys(LOC_COORDS).filter(k => k.endsWith(', BC')),
   NS: Object.keys(LOC_COORDS).filter(k => k.endsWith(', NS')),
   MB: Object.keys(LOC_COORDS).filter(k => k.endsWith(', MB')),
-  // Add US state groups as needed, e.g.:
-  // WA: Object.keys(LOC_COORDS).filter(k => k.endsWith(', WA')),
 };
 
-// .ca uses km, .com uses mi — match what Amazon's API expects per domain
+// .ca uses km, .com uses mi
 function getGeoUnit() {
   return isCanada ? 'km' : 'mi';
 }
@@ -105,24 +100,13 @@ function haversineKm(lat1, lng1, lat2, lng2) {
 }
 
 // Derive the best geoQueryClause from the currently selected location chips.
-//
-// Strategy: always use the FIRST selected city as the center point.
-// This guarantees the center is a real location where Amazon has data,
-// rather than a mathematical centroid that could land in an empty area.
-// The radius expands to cover all other selected cities.
-//
-//   - Include mode + chips  → circle from first city covering all selected
-//   - Include mode + no chips → no clause (search everywhere)
-//   - Exclude mode           → no clause (text filter handles exclusions)
 function resolveGeoClause() {
   const locMode = window.JS_LOC_MODE || 'include';
 
-  // Exclude mode: text filter handles it — never send geo coordinates
   if (locMode === 'exclude') return null;
 
   const locs = Array.isArray(window.JS_LOC_FILTERS) ? window.JS_LOC_FILTERS : [];
 
-  // No chips selected in include mode: search everywhere, no geo needed
   if (!locs.length) return null;
 
   const coords = locs.map(loc => LOC_COORDS[loc]).filter(Boolean);
@@ -130,7 +114,6 @@ function resolveGeoClause() {
 
   const unit = getGeoUnit();
 
-  // Single city: tight radius — 15km for CA, 10mi for US
   if (coords.length === 1) {
     return {
       lat: coords[0].lat,
@@ -140,7 +123,6 @@ function resolveGeoClause() {
     };
   }
 
-  // Multiple cities: use FIRST city as center, expand radius to cover the rest
   const center = coords[0];
   let maxDistKm = 0;
   for (let i = 1; i < coords.length; i++) {
@@ -233,15 +215,14 @@ if (!isAllowedDomain || !isHomepage) {
         locale,
         country,
         keyWords: "",
-        containFilters: [{ key: "isPrivateSchedule", val: ["false", "true"] }],
-        // we dont actually need these
-          
+        // we actually need these dont remove
         // equalFilters: [{ key: "scheduleRequiredLanguage", val: locale }],
         // rangeFilters: [{ key: "hoursPerWeek", range: { minimum: 0, maximum: 80 } }],
         // orFilters: [],
         // sorters: [{ fieldName: 'totalPayRateMax', ascending: 'false' }],
-        // dateFilters: [{ key: 'firstDayOnSite', range: { startDate: requestDate() } }],
         // Fresh date on every API request; avoids a stale midnight filter.
+        // dateFilters: [{ key: 'firstDayOnSite', range: { startDate: requestDate() } }],
+        containFilters: [{ key: "isPrivateSchedule", val: ["false", "true"] }],
         pageSize: 100,
       };
       if (geo) searchJobRequest.geoQueryClause = geo;

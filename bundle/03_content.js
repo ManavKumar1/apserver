@@ -2,7 +2,6 @@ const hostname = window.location.hostname;
 const pathname = window.location.pathname;
 const ALLOWED_HOSTS = ['hiring.amazon.com', 'hiring.amazon.ca'];
 const isAllowedDomain = ALLOWED_HOSTS.some(h => hostname === h);
-
 const isHomepage = pathname === '/' || pathname === '' || pathname === '/app';
 
 const isCanada = hostname.includes('.ca');

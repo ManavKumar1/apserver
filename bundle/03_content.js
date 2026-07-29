@@ -210,6 +210,7 @@ if (!isAllowedDomain || !isHomepage) {
     const INTERVAL_MS = 100;
 
     const getJobsBody = () => {
+
       const geo = resolveGeoClause();
       const searchJobRequest = {
         locale,

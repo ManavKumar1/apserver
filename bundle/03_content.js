@@ -24,6 +24,14 @@ function tgSend(text) {
   }
 }
 
+// ── Helper to generate Amazon-style UUID for Anti-Bot headers ─────────────
+function generateUUID() {
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+    var r = Math.random() * 16 | 0, v = c == 'x' ? r : (r & 0x3 | 0x8);
+    return v.toString(16);
+  });
+}
+
 // ── Exact coordinates for every filterable location ────────────────────────
 const LOC_COORDS = {
   // ── Canada ──
@@ -149,10 +157,28 @@ if (!isAllowedDomain || !isHomepage) {
 
   const requestDate = () => new Date().toISOString().split('T')[0];
 
+  // ── Dynamic Session Token Management ──────────────────────────────────────
+  let currentSessionToken = localStorage.getItem('sessionToken') || 'null';
+  
+  function refreshSessionToken() {
+    try {
+      const newToken = localStorage.getItem('sessionToken') || 'null';
+      if (newToken !== currentSessionToken) {
+        currentSessionToken = newToken;
+        console.log('[AP] Session token updated from localStorage.');
+      }
+      // Always update the header to ensure it's fresh
+      baseHeaders['authorization'] = `Bearer Status|unauthenticated|Session|${currentSessionToken}`;
+    } catch (e) {
+      currentSessionToken = 'null';
+      baseHeaders['authorization'] = 'Bearer Status|unauthenticated|Session|null';
+    }
+  }
+
   const baseHeaders = {
     'accept': '*/*',
     'accept-language': 'en-GB,en-US;q=0.9,en;q=0.8',
-    'authorization': 'Status|unauthenticated|Session|null',
+    'authorization': `Bearer Status|unauthenticated|Session|${currentSessionToken}`,
     'country': country,
     'cache-control': 'no-cache',
     'content-type': 'application/json',
@@ -160,6 +186,10 @@ if (!isAllowedDomain || !isHomepage) {
     'pragma': 'no-cache',
     'x-amz-user-agent': 'aws-amplify/2.0.0',
   };
+
+  // Initial fetch & start 30-minute refresh cycle
+  refreshSessionToken();
+  setInterval(refreshSessionToken, 30 * 60 * 1000);
 
   const POLL_MODE_KEY = 'ap_poll_mode';
   let pollMode = localStorage.getItem(POLL_MODE_KEY) === 'interval' ? 'interval' : 'sequential';
@@ -337,8 +367,18 @@ if (!isAllowedDomain || !isHomepage) {
       requestCount++;
       inFlightCount++;
       try {
+        // Inject dynamic Anti-Bot / Telemetry headers for EVERY request
+        const reqHeaders = {
+          ...baseHeaders,
+          'x-amzn-requestld': generateUUID(),
+          'x-hvh-time': Date.now().toString()
+        };
+
         const res = await fetch(API_URL, {
-          method: 'POST', headers: baseHeaders, body: JSON.stringify(body), signal: controller.signal,
+          method: 'POST', 
+          headers: reqHeaders, 
+          body: JSON.stringify(body), 
+          signal: controller.signal,
         });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = await res.json();

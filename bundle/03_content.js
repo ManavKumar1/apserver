@@ -175,7 +175,7 @@ if (!isAllowedDomain || !isHomepage) {
   const baseHeaders = {
     'accept': '*/*',
     'accept-language': 'en-GB,en-US;q=0.9,en;q=0.8',
-    'authorization': `Bearer Status|unauthenticated|Session|${currentSessionToken}`,
+    'authorization': `Bearer Status|authenticated|Session|${currentSessionToken}`,
     'country': country,
     'cache-control': 'no-cache',
     'content-type': 'application/json',
@@ -193,10 +193,10 @@ if (!isAllowedDomain || !isHomepage) {
         console.log('[AP] Session token updated from localStorage.');
       }
       // Always update the header to ensure it's fresh
-      baseHeaders['authorization'] = `Bearer Status|unauthenticated|Session|${currentSessionToken}`;
+      baseHeaders['authorization'] = `Bearer Status|authenticated|Session|${currentSessionToken}`;
     } catch (e) {
       currentSessionToken = 'null';
-      baseHeaders['authorization'] = 'Bearer Status|unauthenticated|Session|null';
+      baseHeaders['authorization'] = 'Bearer Status|authenticated|Session|null';
     }
   }
 

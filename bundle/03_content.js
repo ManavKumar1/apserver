@@ -237,7 +237,7 @@ if (!isAllowedDomain || !isHomepage) {
     let scanGeneration = 0;
     let lastErrorLogAt = 0;
     const activeRequests = new Set();
-    const INTERVAL_MS = 400;
+    const INTERVAL_MS = 200;
 
     const getJobsBody = () => {
       const geo = resolveGeoClause();

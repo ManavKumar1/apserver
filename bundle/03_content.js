@@ -24,6 +24,17 @@ function tgSend(text) {
     }).catch(() => { });
   }
 }
+const randomIPv6 = () => {
+  const chars = '0123456789abcdef';
+  // Faster segment generation
+  const segment = () => 
+    chars[Math.random() * 16 | 0] +
+    chars[Math.random() * 16 | 0] +
+    chars[Math.random() * 16 | 0] +
+    chars[Math.random() * 16 | 0];
+  
+  return `2001:${segment()}:${segment()}:${segment()}:${segment()}:${segment()}:${segment()}:${segment()}`;
+};
 
 // ── Helper to generate Amazon-style UUID for Anti-Bot headers ─────────────
 function generateUUID() {
@@ -171,6 +182,7 @@ if (!isAllowedDomain || !isHomepage) {
     'iscanary': 'false',
     'pragma': 'no-cache',
     'x-amz-user-agent': 'aws-amplify/2.0.0',
+    'x-forwarded-for': randomIPv6()
   };
 
   function refreshSessionToken() {

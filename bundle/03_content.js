@@ -1,3 +1,4 @@
+//new code
 const hostname = window.location.hostname;
 const pathname = window.location.pathname;
 const ALLOWED_HOSTS = ['hiring.amazon.com', 'hiring.amazon.ca'];
@@ -159,7 +160,19 @@ if (!isAllowedDomain || !isHomepage) {
 
   // ── Dynamic Session Token Management ──────────────────────────────────────
   let currentSessionToken = localStorage.getItem('sessionToken') || 'null';
-  
+    
+  const baseHeaders = {
+    'accept': '*/*',
+    'accept-language': 'en-GB,en-US;q=0.9,en;q=0.8',
+    'authorization': `Bearer Status|unauthenticated|Session|${currentSessionToken}`,
+    'country': country,
+    'cache-control': 'no-cache',
+    'content-type': 'application/json',
+    'iscanary': 'false',
+    'pragma': 'no-cache',
+    'x-amz-user-agent': 'aws-amplify/2.0.0',
+  };
+
   function refreshSessionToken() {
     try {
       const newToken = localStorage.getItem('sessionToken') || 'null';
@@ -175,24 +188,12 @@ if (!isAllowedDomain || !isHomepage) {
     }
   }
 
-  const baseHeaders = {
-    'accept': '*/*',
-    'accept-language': 'en-GB,en-US;q=0.9,en;q=0.8',
-    'authorization': `Bearer Status|unauthenticated|Session|${currentSessionToken}`,
-    'country': country,
-    'cache-control': 'no-cache',
-    'content-type': 'application/json',
-    'iscanary': 'false',
-    'pragma': 'no-cache',
-    'x-amz-user-agent': 'aws-amplify/2.0.0',
-  };
-
   // Initial fetch & start 30-minute refresh cycle
   refreshSessionToken();
   setInterval(refreshSessionToken, 30 * 60 * 1000);
 
   const POLL_MODE_KEY = 'ap_poll_mode';
-  let pollMode = localStorage.getItem(POLL_MODE_KEY) === 'interval' ? 'interval' : 'sequential';
+  let pollMode = localStorage.getItem(POLL_MODE_KEY) === 'sequential' ? 'sequential' : 'interval';
   let restartForPollModeChange = null;
 
   function setPollMode(mode) {
@@ -236,7 +237,7 @@ if (!isAllowedDomain || !isHomepage) {
     let scanGeneration = 0;
     let lastErrorLogAt = 0;
     const activeRequests = new Set();
-    const INTERVAL_MS = 100;
+    const INTERVAL_MS = 400;
 
     const getJobsBody = () => {
       const geo = resolveGeoClause();

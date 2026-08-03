@@ -1,3 +1,4 @@
+//new code
 const AP_VERSION = '2.0.7';
 
 const LOCATIONS = [
@@ -638,7 +639,7 @@ function injectBadge() {
 
   const pollModeBtn = document.getElementById('ap-poll-mode-btn');
   if (pollModeBtn) {
-    const saved = localStorage.getItem('ap_poll_mode') || 'sequential';
+  const saved = localStorage.getItem('ap_poll_mode') || 'interval';
     pollModeBtn.textContent = saved === 'interval' ? '\u26a1 Interval' : '\uD83D\uDD17 Sequential';
     pollModeBtn.addEventListener('click', (e) => {
       e.stopPropagation();

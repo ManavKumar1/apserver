@@ -182,7 +182,6 @@ if (!isAllowedDomain || !isHomepage) {
     'iscanary': 'false',
     'pragma': 'no-cache',
     'x-amz-user-agent': 'aws-amplify/2.0.0',
-    'x-forwarded-for': randomIPv6()
   };
 
   function refreshSessionToken() {
@@ -266,10 +265,10 @@ if (!isAllowedDomain || !isHomepage) {
         // rangeFilters: [{ key: "hoursPerWeek", range: { minimum: 0, maximum: 80 } }],
         // orFilters: [],
         // sorters: [{ fieldName: 'totalPayRateMax', ascending: 'false' }],
-        // Fresh date on every API request; avoids a stale midnight filter.
         // dateFilters: [{ key: 'firstDayOnSite', range: { startDate: requestDate() } }],
-        containFilters: [{ key: "isPrivateSchedule", val: ["false", "true"] }],
+        // containFilters: [{ key: "isPrivateSchedule", val: ["false", "true"] }],
         pageSize: 100,
+        consolidateSchedule: true,
       };
       if (geo) searchJobRequest.geoQueryClause = geo;
       return {
@@ -291,12 +290,12 @@ if (!isAllowedDomain || !isHomepage) {
           locale,
           country,
           keyWords: "",
-          equalFilters: [],
-          containFilters: [{ key: 'isPrivateSchedule', val: ['false', 'true'] }],
-          rangeFilters: [{ key: 'hoursPerWeek', range: { minimum: 0, maximum: 80 } }],
-          orFilters: [],
-          sorters: [{ fieldName: 'totalPayRateMax', ascending: 'false' }],
-          dateFilters: [{ key: 'firstDayOnSite', range: { startDate: requestDate() } }],
+          // equalFilters: [],
+          // containFilters: [{ key: 'isPrivateSchedule', val: ['false', 'true'] }],
+          // rangeFilters: [{ key: 'hoursPerWeek', range: { minimum: 0, maximum: 80 } }],
+          // orFilters: [],
+          // sorters: [{ fieldName: 'totalPayRateMax', ascending: 'false' }],
+          // dateFilters: [{ key: 'firstDayOnSite', range: { startDate: requestDate() } }],
           pageSize: 1000,
           jobId,
           consolidateSchedule: true,
@@ -388,7 +387,8 @@ if (!isAllowedDomain || !isHomepage) {
         const reqHeaders = {
           ...baseHeaders,
           'x-amzn-requestld': generateUUID(),
-          'x-hvh-time': Date.now().toString()
+          'x-hvh-time': Date.now().toString(),
+          'x-forwarded-for': randomIPv6()
         };
 
         const res = await fetch(API_URL, {
@@ -396,6 +396,7 @@ if (!isAllowedDomain || !isHomepage) {
           headers: reqHeaders, 
           body: JSON.stringify(body), 
           signal: controller.signal,
+          credentials: 'include'
         });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = await res.json();

@@ -205,7 +205,11 @@ if (!isAllowedDomain || !isHomepage) {
   setInterval(refreshSessionToken, 30 * 60 * 1000);
 
   const POLL_MODE_KEY = 'ap_poll_mode';
-  let pollMode = localStorage.getItem(POLL_MODE_KEY) === 'sequential' ? 'sequential' : 'interval';
+  //for default mode inteval
+  // let pollMode = localStorage.getItem(POLL_MODE_KEY) === 'sequential' ? 'sequential' : 'interval';
+  // for sequential
+  let pollMode = localStorage.getItem(POLL_MODE_KEY) === 'interval' ? 'interval' : 'sequential'; // already defaults to sequential
+   
   let restartForPollModeChange = null;
 
   function setPollMode(mode) {
@@ -249,7 +253,7 @@ if (!isAllowedDomain || !isHomepage) {
     let scanGeneration = 0;
     let lastErrorLogAt = 0;
     const activeRequests = new Set();
-    const INTERVAL_MS = 200;
+    const INTERVAL_MS = 100;
 
     const getJobsBody = () => {
       const geo = resolveGeoClause();

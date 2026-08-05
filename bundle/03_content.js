@@ -227,7 +227,15 @@ if (!isAllowedDomain || !isHomepage) {
   };
   window.JS_POLL_MODE = () => pollMode;
 
+  // ── FIX: single-redirect guard ────────────────────────────────────────────
+  // Ensures redirectToConsent() fires at most once per scan session,
+  // preventing duplicate redirects from race conditions or concurrent calls.
+  let redirected = false;
+
   function redirectToConsent(jobId, scheduleId) {
+    if (redirected) return; // already redirecting — ignore all subsequent calls
+    redirected = true;
+
     const base = isCanada
       ? 'https://hiring.amazon.ca/application/ca/#/consent'
       : 'https://hiring.amazon.com/application/us/#/consent';
@@ -555,6 +563,7 @@ if (!isAllowedDomain || !isHomepage) {
 
     function stopScan(status = 'STOPPED', keepScanWanted = false) {
       running = false;
+      redirected = false; // reset redirect guard so a fresh scan can redirect again
       if (!keepScanWanted) scanWanted = false;
       scanGeneration++;
       clearPollingWork();

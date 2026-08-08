@@ -353,6 +353,12 @@ if (!isAllowedDomain || !isHomepage) {
     }
 
     const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
+    // jitter(200)       → fixed 200ms
+    // jitter(100, 200)  → random 100–300ms
+    // jitter(0, 300)    → random 0–300ms
+    const jitter = (fixed, randomMax = 0) =>
+      delay(fixed + (randomMax ? Math.random() * randomMax | 0 : 0));
+
     const isCurrentScan = generation => running && !found && generation === scanGeneration;
 
     function clearIntervalPoller() {
@@ -394,8 +400,8 @@ if (!isAllowedDomain || !isHomepage) {
         // Inject dynamic Anti-Bot / Telemetry headers for EVERY request
         const reqHeaders = {
           ...baseHeaders,
-          'x-amzn-requestld': generateUUID(),
-          'x-hvh-time': Date.now().toString(),
+          // 'x-amzn-requestld': generateUUID(),
+          // 'x-hvh-time': Date.now().toString(),
           'x-forwarded-for': randomIPv6()
         };
 
@@ -514,6 +520,7 @@ if (!isAllowedDomain || !isHomepage) {
         if (!isCurrentScan(generation)) return;
         const matched = filterJobs(response.data?.data?.searchJobCardsByLocation?.jobCards || []);
         if (matched.length) await handleJobMatch(matched, generation);
+        await jitter(150, 300); // fixed 200ms — swap to e.g. jitter(100, 200) for random 100–300ms
       }
     }
 

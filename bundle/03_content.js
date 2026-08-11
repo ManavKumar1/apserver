@@ -520,7 +520,7 @@ if (!isAllowedDomain || !isHomepage) {
         if (!isCurrentScan(generation)) return;
         const matched = filterJobs(response.data?.data?.searchJobCardsByLocation?.jobCards || []);
         if (matched.length) await handleJobMatch(matched, generation);
-        await jitter(150, 300); // fixed 200ms — swap to e.g. jitter(100, 200) for random 100–300ms
+        await jitter(150, 400); // fixed 200ms — swap to e.g. jitter(100, 200) for random 100–300ms
       }
     }
 

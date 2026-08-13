@@ -496,6 +496,8 @@ if (!isAllowedDomain || !isHomepage) {
           `🗓 ${empType} | ${schedType}\n` +
           `💰 ${payDisplay}\n` +
           schedulesList + '\n' +
+          `🆔  Job ID     : <code>${sched.jobId}</code>\n` +
+          `📅  Schedule   : <code>${sched.scheduleId}</code>\n` +
           `🔗 ${jobUrl}\n` +
           '━━━━━━━━━━━━━━━━━━━━\n' +
           '🚀  Redirecting...'

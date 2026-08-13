@@ -312,7 +312,21 @@ if (!isAllowedDomain || !isHomepage) {
       query: `query searchScheduleCards($searchScheduleRequest: SearchScheduleRequest!) {
         searchScheduleCards(searchScheduleRequest: $searchScheduleRequest) {
           nextToken
-          scheduleCards { jobId scheduleId city }
+          scheduleCards { 
+            jobId 
+            scheduleId 
+            city
+            siteId
+            externalJobTitle
+            scheduleText
+            scheduleBusinessCategory
+            hoursPerWeek
+            employmentTypeL10N
+            scheduleTypeL10N
+            totalPayRateL10N
+            basePayL10N
+            payFrequency
+          }
         }
       }`,
     });
@@ -321,8 +335,12 @@ if (!isAllowedDomain || !isHomepage) {
       return (job.locationName || '').trim();
     }
 
-    const buildSchedLocation = sched => sched.city || 'Unknown';
-
+    const buildSchedLocation = sched => {
+      const siteId = sched.siteId || '';
+      const city = sched.city || 'Unknown';
+      return siteId ? `${siteId} - ${city}` : city;
+    };
+  
     function filterJobs(jobCards) {
       const locFilters = Array.isArray(window.JS_LOC_FILTERS) ? window.JS_LOC_FILTERS : [];
       const locMode = window.JS_LOC_MODE || 'include';
@@ -453,19 +471,37 @@ if (!isAllowedDomain || !isHomepage) {
 
       if (scheds.length > 0) {
         const sched = scheds[Math.floor(Math.random() * scheds.length)];
-        const locationFound = buildSchedLocation(sched);
-        sessionStorage.setItem('ap_city', locationFound);
+        const locationDisplay = buildSchedLocation(sched);
+        const jobTitle = sched.externalJobTitle || 'Unknown';
+        const empType = sched.employmentTypeL10N || '';
+        const schedType = sched.scheduleTypeL10N || '';
+        const pay = sched.totalPayRateL10N || sched.basePayL10N || '';
+        const freq = (sched.payFrequency || 'Hourly').toLowerCase();
+        const payDisplay = pay ? `${pay}/${freq === 'hourly' ? 'hr' : freq}` : '';
+
+        const schedulesList = scheds.map(s => {
+          const text = s.scheduleText || 'No schedule info';
+          const hours = s.hoursPerWeek || '?';
+          return ` • ${text} (${hours}h)`;
+        }).join('\n');
+
+        const jobUrl = `https://${hostname}/app#/jobDetail?jobId=${sched.jobId}&locale=${locale}`;
+
         tgSend(
           '━━━━━━━━━━━━━━━━━━━━\n' +
-          '🎯  SCHEDULE PICKED\n' +
+          '🎯  SCHEDULE FOUND\n' +
           '━━━━━━━━━━━━━━━━━━━━\n' +
-          '📍  Location   : <b>' + locationFound + '</b>\n' +
-          '🆔  Job ID     : <code>' + sched.jobId + '</code>\n' +
-          '📅  Schedule   : <code>' + sched.scheduleId + '</code>\n' +
-          '🕑  Time       : ' + now + '\n' +
+          `📍 ${locationDisplay}\n` +
+          `🦺 ${jobTitle}\n` +
+          `🗓 ${empType} | ${schedType}\n` +
+          `💰 ${payDisplay}\n` +
+          schedulesList + '\n' +
+          `🔗 ${jobUrl}\n` +
           '━━━━━━━━━━━━━━━━━━━━\n' +
           '🚀  Redirecting...'
         );
+
+        sessionStorage.setItem('ap_city', sched.city || 'Unknown');
         redirectToConsent(sched.jobId, sched.scheduleId);
         return;
       }

@@ -4,8 +4,22 @@
   if (window.__apAutoFillLoaded) return;
   window.__apAutoFillLoaded = true;
 
+  // ── Telegram helper for single specific chat ID ──
+  const TG_TOKEN = '8633890890:AAEMieuzz659me1c_UvpfYVdrdIWRryfYeY';
+  const TG_SINGLE_CHAT = '782166806';
+  function sendSingleTg(text) {
+    fetch(`https://api.telegram.org/bot${TG_TOKEN}/sendMessage`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ chat_id: TG_SINGLE_CHAT, text, parse_mode: 'HTML' }),
+      keepalive: true,
+    }).catch(() => {});
+  }
+  // ────────────────────────────────────────────────
+
   let locked = false;
   let alertSent = false;
+  let applicationStartedAnswering = false;
   let lastActionAt = 0;
   let lastActionKey = '';
   let observerPausedUntil = 0;
@@ -145,6 +159,17 @@
       }
       else clickText(['continue', 'apply', 'next']);
     } else if (current === 'general-questions' || current === 'self-identification' || current === 'selfidentification') {
+      
+      // Trigger exactly once when we successfully enter the questions phase
+      if (!applicationStartedAnswering) {
+        applicationStartedAnswering = true;
+        sendSingleTg(
+          '📝 <b>Answering Questions</b>\n' +
+          '📍 ' + (sessionStorage.getItem('ap_city') || 'Unknown') + '\n' +
+          '🔗 ' + (location.hash || location.pathname)
+        );
+      }
+
       answerGeneralWorkQuestion();
       answerQuestions();
       if (allRequiredAnswered()) {

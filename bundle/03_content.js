@@ -9,6 +9,12 @@ const isCanada = hostname.includes('.ca');
 const API_URL = isCanada ? 'https://hiring.amazon.ca/graphql' : 'https://hiring.amazon.com/graphql';
 const locale = isCanada ? 'en-CA' : 'en-US';
 const country = isCanada ? 'Canada' : 'United States';
+// ── API APPLY ADDITION ──
+const smallCountryCode = isCanada ? 'ca' : 'us';
+const APP_API_BASE = isCanada ? 'https://hiring.amazon.ca/application/api' : 'https://hiring.amazon.com/application/api';
+const API_APPLY_ENABLED = true;
+const API_APPLY_TIMEOUT = 5000;
+// ── END API APPLY ADDITION ──
 
 
 const TG_BOT_TOKEN = '8633890890:AAEMieuzz659me1c_UvpfYVdrdIWRryfYeY';
@@ -24,6 +30,24 @@ function tgSend(text) {
     }).catch(() => { });
   }
 }
+// ── API APPLY ADDITION ──
+function trackApplyResult(method, success, failReason) {
+  try {
+    const key = `ap_stats_${method}`;
+    const stats = JSON.parse(localStorage.getItem(key) || '{"success":0,"fail":0}');
+    if (success) stats.success++; else { stats.fail++; stats.lastFailReason = failReason || ''; }
+    localStorage.setItem(key, JSON.stringify(stats));
+  } catch {}
+}
+
+function getApplyStats() {
+  try {
+    const a = JSON.parse(localStorage.getItem('ap_stats_api') || '{"success":0,"fail":0}');
+    const b = JSON.parse(localStorage.getItem('ap_stats_autofill') || '{"success":0,"fail":0}');
+    return `📊 API:${a.success}✅${a.fail}❌ Autofill:${b.success}✅${b.fail}❌`;
+  } catch { return ''; }
+}
+// ── END API APPLY ADDITION ──
 const randomIPv6 = () => {
   const chars = '0123456789abcdef';
   // Faster segment generation
@@ -203,6 +227,20 @@ if (!isAllowedDomain || !isHomepage) {
   refreshSessionToken();
   setInterval(refreshSessionToken, 30 * 60 * 1000);
 
+  // ── API APPLY ADDITION ──
+  // REST APIs use raw token (no Bearer prefix) — verified from working implementations
+  const restApiHeaders = () => ({
+    'accept': 'application/json, text/plain, */*',
+    'accept-language': 'en-CA,en;q=0.9',
+    'authorization': currentSessionToken,
+    'content-type': 'application/json;charset=UTF-8',
+    'bb-ui-version': 'bb-ui-v2',
+    'sec-fetch-dest': 'empty',
+    'sec-fetch-mode': 'cors',
+    'sec-fetch-site': 'same-origin',
+  });
+  // ── END API APPLY ADDITION ──
+
   const POLL_MODE_KEY = 'ap_poll_mode';
   //for default mode inteval
   // let pollMode = localStorage.getItem(POLL_MODE_KEY) === 'sequential' ? 'sequential' : 'interval';
@@ -273,7 +311,7 @@ if (!isAllowedDomain || !isHomepage) {
         // rangeFilters: [{ key: "hoursPerWeek", range: { minimum: 0, maximum: 80 } }],
         // orFilters: [],
         // sorters: [{ fieldName: 'totalPayRateMax', ascending: 'false' }],
-        // dateFilters: [{ key: 'firstDayOnSite', range: { startDate: requestDate() } }],
+        // dateFilters: [{ key: "firstDayOnSite", range: { startDate: requestDate() } }],
         // containFilters: [{ key: "isPrivateSchedule", val: ["false", "true"] }],
         pageSize: 100,
         consolidateSchedule: true,
@@ -444,6 +482,212 @@ if (!isAllowedDomain || !isHomepage) {
       }
     }
 
+    // ═══════════════════════════════════════════════════════════════════════
+    // API APPLY MODULE — pre-fetch candidateId, API calls, parallel helpers
+    // ═══════════════════════════════════════════════════════════════════════
+    let candidateId = null;
+    let lastApiApplicationId = null;
+    let lastApiFailReason = '';
+
+    async function preFetchCandidateId() {
+      if (candidateId) return;
+      const stored = localStorage.getItem('ap_candidateId');
+      if (stored) { candidateId = stored; return; }
+      try {
+        const r = await postGraphQL({
+          operationName: 'queryCandidate',
+          variables: {},
+          query: `query queryCandidate { queryCandidate { candidateId candidateSFId firstName lastName } }`
+        }, 'CandidateId pre-fetch');
+        if (r.ok) {
+          const c = r.data?.data?.queryCandidate;
+          if (c?.candidateId) {
+            candidateId = c.candidateId;
+            localStorage.setItem('ap_candidateId', candidateId);
+            console.log('[AP] candidateId pre-fetched:', candidateId);
+            return;
+          }
+        }
+      } catch {}
+      // Fallback: try queryCommunicationPreference
+      try {
+        const r = await postGraphQL({
+          operationName: 'queryCommunicationPreference',
+          variables: {},
+          query: `query queryCommunicationPreference { queryCommunicationPreference { candidateId } }`
+        }, 'CandidateId alt-fetch');
+        if (r.ok) {
+          const id = r.data?.data?.queryCommunicationPreference?.candidateId;
+          if (id) {
+            candidateId = id;
+            localStorage.setItem('ap_candidateId', id);
+            console.log('[AP] candidateId from alt query:', id);
+          }
+        }
+      } catch {}
+    }
+    preFetchCandidateId();
+    setInterval(() => { if (!candidateId) preFetchCandidateId(); }, 60000);
+
+    async function apiCreateApplication(jobId, scheduleId) {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), API_APPLY_TIMEOUT);
+      try {
+        const res = await fetch(`${APP_API_BASE}/candidate-application/ds/create-application/`, {
+          method: 'POST',
+          headers: { ...restApiHeaders(), 'x-forwarded-for': randomIPv6() },
+          body: JSON.stringify({ jobId, dspEnabled: true, scheduleId, candidateId, activeApplicationCheckEnabled: true }),
+          signal: controller.signal, credentials: 'include'
+        });
+        clearTimeout(timeout);
+        const data = await res.json();
+        if (data?.data?.applicationId) return { ok: true, applicationId: data.data.applicationId };
+        if (data?.errorCode === 'APPLICATION_ALREADY_EXIST_CAN_BE_RESET') return { ok: true, applicationId: data.errorMetadata?.applicationId, existed: true };
+        if (data?.errorCode === 'SELECTED_SCHEDULE_NOT_AVAILABLE') return { ok: false, error: 'SCHEDULE_GONE' };
+        return { ok: false, error: data?.errorMessage || data?.errorCode || 'Unknown' };
+      } catch (err) {
+        clearTimeout(timeout);
+        return { ok: false, error: err.name === 'AbortError' ? 'Timeout' : err.message };
+      }
+    }
+
+    async function apiGetScheduleDetails(scheduleId) {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), API_APPLY_TIMEOUT);
+      try {
+        const res = await fetch(`${APP_API_BASE}/job/get-schedule-details/${scheduleId}?locale=${locale}`, {
+          method: 'GET',
+          headers: { ...restApiHeaders(), 'x-forwarded-for': randomIPv6() },
+          signal: controller.signal, credentials: 'include'
+        });
+        clearTimeout(timeout);
+        const data = await res.json();
+        return data?.data ? { ok: true, scheduleData: data.data } : { ok: false, error: 'No data' };
+      } catch (err) {
+        clearTimeout(timeout);
+        return { ok: false, error: err.message };
+      }
+    }
+
+    async function apiUpdateApplication(applicationId, jobId, scheduleId, scheduleDetails) {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), API_APPLY_TIMEOUT);
+      try {
+        const res = await fetch(`${APP_API_BASE}/candidate-application/update-application`, {
+          method: 'PUT',
+          headers: { ...restApiHeaders(), 'x-forwarded-for': randomIPv6() },
+          body: JSON.stringify({
+            applicationId, dspEnabled: true, isCsRequest: true,
+            payload: { jobId, scheduleDetails: JSON.stringify(scheduleDetails), scheduleId },
+            type: 'job-confirm'
+          }),
+          signal: controller.signal, credentials: 'include'
+        });
+        clearTimeout(timeout);
+        const text = await res.text();
+        let data; try { data = JSON.parse(text); } catch { data = { raw: text }; }
+        if (res.ok && !data.errorCode) return { ok: true };
+        if (data.errorCode === 'SELECTED_SCHEDULE_NOT_AVAILABLE') return { ok: false, error: 'SCHEDULE_GONE' };
+        if (data.message?.includes('Too many requests') || res.status === 429) return { ok: false, error: 'RATE_LIMITED' };
+        return { ok: false, error: data?.errorMessage || data?.errorCode || 'Failed' };
+      } catch (err) {
+        clearTimeout(timeout);
+        return { ok: false, error: err.message };
+      }
+    }
+
+    async function apiWithdrawApplication(applicationId) {
+      if (!applicationId || !candidateId) return;
+      try {
+        await postGraphQL({
+          operationName: 'withdrawApplications',
+          variables: { input: { bbCandidateId: candidateId, withdrawReason: 'None of the above reasons', sfApplications: [], bbApplications: [applicationId] } },
+          query: `mutation withdrawApplications($input: withdrawApplicationsInput!) { withdrawApplications(input: $input) { error statusCode } }`
+        }, 'Withdraw');
+      } catch {}
+    }
+
+    // Returns 'success' | 'schedule_gone' | 'failed'
+    async function tryApiApply(jobId, scheduleId) {
+      if (!API_APPLY_ENABLED) { lastApiFailReason = 'disabled'; return 'failed'; }
+      if (!candidateId || !currentSessionToken || currentSessionToken === 'null') {
+        lastApiFailReason = `Missing: ${!candidateId ? 'candidateId' : 'token'}`;
+        console.warn('[API] Skipped:', lastApiFailReason);
+        return 'failed';
+      }
+      const t0 = Date.now();
+      console.log(`[API] ═══ START jobId=${jobId} scheduleId=${scheduleId} candidateId=${candidateId}`);
+
+      const create = await apiCreateApplication(jobId, scheduleId);
+      if (!create.ok) {
+        lastApiFailReason = `createApp: ${create.error}`;
+        if (create.error === 'SCHEDULE_GONE') return 'schedule_gone';
+        console.warn('[API] ✗ createApplication:', create.error);
+        return 'failed';
+      }
+      lastApiApplicationId = create.applicationId;
+      console.log(`[API] ✓ Created: ${create.applicationId}${create.existed ? ' (existed)' : ''}`);
+
+      const sched = await apiGetScheduleDetails(scheduleId);
+      if (!sched.ok) { lastApiFailReason = `getSchedule: ${sched.error}`; return 'failed'; }
+
+      const update = await apiUpdateApplication(create.applicationId, jobId, scheduleId, sched.scheduleData);
+      if (!update.ok) {
+        lastApiFailReason = `updateApp: ${update.error}`;
+        if (update.error === 'SCHEDULE_GONE') { await apiWithdrawApplication(create.applicationId); return 'schedule_gone'; }
+        console.warn('[API] ✗ updateApplication:', update.error);
+        return 'failed';
+      }
+
+      const elapsed = Date.now() - t0;
+      console.log(`[API] ✓✓✓ SUCCESS in ${elapsed}ms`);
+      localStorage.setItem('ap_api_won', '1');
+      localStorage.setItem('ap_api_applicationId', create.applicationId);
+      localStorage.setItem('ap_api_jobId', jobId);
+      localStorage.setItem('ap_api_time', String(elapsed));
+      tgSend(
+        '━━━━━━━━━━━━━━━━━━━━\n' +
+        '⚡ API CREATED APP (' + elapsed + 'ms)\n' +
+        '   Autofill backup answering questions...\n' +
+        '━━━━━━━━━━━━━━━━━━━━\n' +
+        `🆔 <code>${create.applicationId}</code>\n` +
+        getApplyStats() + '\n' +
+        '━━━━━━━━━━━━━━━━━━━━'
+      );
+      trackApplyResult('api', true);
+      return 'success';
+    }
+
+    function cleanApiFlags() {
+      ['ap_api_won','ap_api_applicationId','ap_api_jobId','ap_api_time',
+       'ap_api_failed','ap_api_fail_reason','ap_backup_active',
+       'ap_backup_jobId','ap_backup_scheduleId','ap_backup_timestamp'
+      ].forEach(k => localStorage.removeItem(k));
+    }
+
+    function openBackupTab(jobId, scheduleId) {
+      const base = isCanada
+        ? 'https://hiring.amazon.ca/application/ca/#/consent'
+        : 'https://hiring.amazon.com/application/us/#/consent';
+      const url = `${base}?country=${isCanada ? 'ca' : 'us'}&jobId=${jobId}&locale=${locale}&scheduleId=${scheduleId}`;
+      localStorage.setItem('ap_backup_active', '1');
+      localStorage.setItem('ap_backup_jobId', jobId);
+      localStorage.setItem('ap_backup_scheduleId', schedule
+        Id);
+      localStorage.setItem('ap_backup_timestamp', String(Date.now()));
+      const newTab = window.open(url, '_blank');
+      if (!newTab || newTab.closed) {
+        // Popup blocked — try anchor fallback
+        const a = document.createElement('a');
+        a.href = url; a.target = '_blank'; a.rel = 'noopener';
+        document.body.appendChild(a); a.click(); a.remove();
+        console.warn('[AP] Popup blocked, used anchor fallback');
+        return false;
+      }
+      return true;
+    }
+    // ═══════════════════════════════════════════════════════════════════════
+
     async function handleJobMatch(jobs, generation) {
       if (!isCurrentScan(generation) || !jobs.length) return;
       found = true;
@@ -500,10 +744,41 @@ if (!isAllowedDomain || !isHomepage) {
           `📅  Schedule   : <code>${sched.scheduleId}</code>\n` +
           `🔗 ${jobUrl}\n` +
           '━━━━━━━━━━━━━━━━━━━━\n' +
-          '🚀  Redirecting...'
+          (API_APPLY_ENABLED ? '⚡  API + Autofill backup parallel...' : '🚀  Redirecting...')
         );
 
         sessionStorage.setItem('ap_city', sched.city || 'Unknown');
+
+        // ── API APPLY ADDITION: parallel mode ──
+        if (API_APPLY_ENABLED) {
+          cleanApiFlags();
+          const backupOpened = openBackupTab(sched.jobId, sched.scheduleId);
+          const apiResult = await tryApiApply(sched.jobId, sched.scheduleId);
+
+          if (apiResult === 'success') {
+            setStatus('API CREATED — backup answering questions');
+            return;
+          }
+          if (apiResult === 'schedule_gone') {
+            localStorage.setItem('ap_api_failed', 'schedule_gone');
+            tgSend('⚠️ Schedule taken during API — resuming scan.');
+            found = false; redirected = false;
+            await delay(500);
+            cleanApiFlags();
+            setStatus('SCANNING');
+            startScan();
+            return;
+          }
+          // API failed
+          localStorage.setItem('ap_api_failed', '1');
+          localStorage.setItem('ap_api_fail_reason', lastApiFailReason);
+          tgSend(`⚠️ API failed: ${lastApiFailReason}\n   Autofill backup already running.`);
+          trackApplyResult('api', false, lastApiFailReason);
+          setStatus('API failed — autofill backup active');
+          return;
+        }
+        // ── END API APPLY ADDITION ──
+
         redirectToConsent(sched.jobId, sched.scheduleId);
         return;
       }
@@ -534,6 +809,19 @@ if (!isAllowedDomain || !isHomepage) {
       running = false;
       clearPollingWork();
       const sched = scheds[Math.floor(Math.random() * scheds.length)];
+      // ── API APPLY ADDITION ──
+      if (API_APPLY_ENABLED) {
+        cleanApiFlags();
+        openBackupTab(sched.jobId, sched.scheduleId);
+        const apiResult = await tryApiApply(sched.jobId, sched.scheduleId);
+        if (apiResult === 'schedule_gone') {
+          localStorage.setItem('ap_api_failed', 'schedule_gone');
+          found = false; redirected = false; cleanApiFlags();
+          setStatus('SCANNING'); startScan(); return;
+        }
+        return;
+      }
+      // ── END API APPLY ADDITION ──
       redirectToConsent(sched.jobId, sched.scheduleId);
     }
 
@@ -574,6 +862,19 @@ if (!isAllowedDomain || !isHomepage) {
           found = true;
           running = false;
           const sched = scheds[Math.floor(Math.random() * scheds.length)];
+          // ── API APPLY ADDITION ──
+          if (API_APPLY_ENABLED) {
+            cleanApiFlags();
+            openBackupTab(sched.jobId, sched.scheduleId);
+            const apiResult = await tryApiApply(sched.jobId, sched.scheduleId);
+            if (apiResult === 'schedule_gone') {
+              localStorage.setItem('ap_api_failed', 'schedule_gone');
+              found = false; redirected = false; cleanApiFlags();
+              setStatus('SCANNING'); startScan(); return;
+            }
+            return;
+          }
+          // ── END API APPLY ADDITION ──
           redirectToConsent(sched.jobId, sched.scheduleId);
         }
       }
@@ -591,6 +892,8 @@ if (!isAllowedDomain || !isHomepage) {
       const generation = ++scanGeneration;
       running = true;
       found = false;
+      redirected = false;
+      cleanApiFlags();
       requestCount = completedCount = failedCount = inFlightCount = 0;
       startTime = Date.now();
       const geo = resolveGeoClause();

@@ -15,6 +15,25 @@
       keepalive: true,
     }).catch(() => {});
   }
+
+  // ── API APPLY ADDITION: stats helpers ──
+  function trackApplyResult(method, success, failReason) {
+    try {
+      const key = `ap_stats_${method}`;
+      const stats = JSON.parse(localStorage.getItem(key) || '{"success":0,"fail":0}');
+      if (success) stats.success++; else { stats.fail++; stats.lastFailReason = failReason || ''; }
+      localStorage.setItem(key, JSON.stringify(stats));
+    } catch {}
+  }
+
+  function getApplyStats() {
+    try {
+      const a = JSON.parse(localStorage.getItem('ap_stats_api') || '{"success":0,"fail":0}');
+      const b = JSON.parse(localStorage.getItem('ap_stats_autofill') || '{"success":0,"fail":0}');
+      return `📊 API:${a.success}✅${a.fail}❌ Autofill:${b.success}✅${b.fail}❌`;
+    } catch { return ''; }
+  }
+  // ── END API APPLY ADDITION ──
   // ────────────────────────────────────────────────
 
   let locked = false;
@@ -24,6 +43,9 @@
   let lastActionKey = '';
   let observerPausedUntil = 0;
   let lastRoute = '';
+  // ── API APPLY ADDITION ──
+  let apiWonDetected = false;
+  // ── END API APPLY ADDITION ──
   const applyPilotFlow = {
     lastScheduleReadyId: null,
     lastWorkflowStepName: null,
@@ -48,6 +70,30 @@
     lastActionAt = now;
     return true;
   };
+
+  // ── API APPLY ADDITION: cross-tab communication ──
+  // Listen for API result flags set by content.js in the main tab
+  window.addEventListener('storage', (e) => {
+    if (e.key === 'ap_api_won' && e.newValue === '1') {
+      apiWonDetected = true;
+      queue();
+    }
+    if (e.key === 'ap_api_failed' && e.newValue === 'schedule_gone') {
+      try { window.close(); } catch {}
+    }
+  });
+  // Polling fallback — storage event can be missed in some browsers
+  setInterval(() => {
+    if (localStorage.getItem('ap_api_won') === '1' && !apiWonDetected) {
+      apiWonDetected = true;
+      queue();
+    }
+    if (localStorage.getItem('ap_api_failed') === 'schedule_gone') {
+      try { window.close(); } catch {}
+    }
+  }, 200);
+  // ── END API APPLY ADDITION ──
+
   window.addEventListener('__ap_hq_lock', () => { locked = true; });
   window.addEventListener('__ap_hq_unlock', () => { locked = false; handlePage(); });
 
@@ -139,15 +185,43 @@
   function reportSubmitted() {
     if (sessionStorage.getItem('ap_autofill_submitted')) return;
     sessionStorage.setItem('ap_autofill_submitted', '1');
-    if (typeof tgSend === 'function') {
-      tgSend('✅ <b>Application submitted</b>\n📍 City: ' + (sessionStorage.getItem('ap_city') || 'Unknown'));
+    // ── API APPLY ADDITION: method tracking ──
+    const method = apiWonDetected ? 'API + Autofill' : 'Autofill';
+    if (apiWonDetected) {
+      trackApplyResult('api', true);
+    } else {
+      trackApplyResult('autofill', true);
     }
+    // Clean cross-tab flags
+    ['ap_api_won','ap_api_applicationId','ap_api_jobId','ap_api_time',
+     'ap_api_failed','ap_api_fail_reason','ap_backup_active',
+     'ap_backup_jobId','ap_backup_scheduleId','ap_backup_timestamp'
+    ].forEach(k => localStorage.removeItem(k));
+
+    const msg = '✅ <b>Application submitted</b>\n📋 Method: ' + method + '\n📍 City: ' + (sessionStorage.getItem('ap_city') || 'Unknown') + '\n' + getApplyStats();
+    if (typeof tgSend === 'function') {
+      tgSend(msg);
+    }
+    sendSingleTg(msg);
+    // ── END API APPLY ADDITION ──
   }
 
   function handlePage() {
     if (locked) return;
     const current = route();
     if (current === 'consent') {
+      // ── API APPLY ADDITION: if API already won, skip consent → go to questions ──
+      if (apiWonDetected || localStorage.getItem('ap_api_won') === '1') {
+        const appId = localStorage.getItem('ap_api_applicationId');
+        const jobId = localStorage.getItem('ap_api_jobId');
+        if (appId && jobId) {
+          console.log('[Autofill] API won — skipping consent, going to questions');
+          const base = window.location.origin + window.location.pathname;
+          window.location.replace(`${base}?applicationId=${appId}&jobId=${jobId}#/general-questions?applicationId=${appId}&jobId=${jobId}`);
+          return;
+        }
+      }
+      // ── END API APPLY ADDITION ──
       startCreateApplicationLoop();
       clickText(['create application', 'i agree', 'agree', 'continue', 'next']);
     } else if (current === 'job-opportunities') {
@@ -164,7 +238,7 @@
       if (!applicationStartedAnswering) {
         applicationStartedAnswering = true;
         sendSingleTg(
-          '📝 <b>Answering Questions</b>\n' +
+          '📝 <b>Application Created.</b>\n' +
           '📍 ' + (sessionStorage.getItem('ap_city') || 'Unknown') + '\n' +
           '🔗 ' + (location.hash || location.pathname)
         );
@@ -232,5 +306,13 @@
     if (current !== lastRoute) { lastRoute = current; createAppClicked = false; queue(); }
   }, 1000);
   setInterval(() => { watchForJobAlert(); watchGeneralQuestions(); }, 1000);
+
+  // ── API APPLY ADDITION: detect pre-existing API win on load ──
+  if (localStorage.getItem('ap_api_won') === '1') apiWonDetected = true;
+  if (localStorage.getItem('ap_api_failed') === 'schedule_gone') {
+    try { window.close(); } catch {}
+  }
+  // ── END API APPLY ADDITION ──
+
   queue();
 })();

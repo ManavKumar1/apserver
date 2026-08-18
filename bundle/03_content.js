@@ -491,6 +491,7 @@ if (!isAllowedDomain || !isHomepage) {
     // ═══════════════════════════════════════════════════════════════════════
     let candidateId = null;
     let candidateIdRequest = null;
+    let candidateIdWatchStartedAt = Date.now();
     let lastApiApplicationId = null;
     let lastApiFailReason = '';
 
@@ -572,7 +573,26 @@ if (!isAllowedDomain || !isHomepage) {
       return candidateIdRequest;
     }
     preFetchCandidateId();
-    setInterval(() => { if (!candidateId) preFetchCandidateId(); }, 60000);
+
+    // Keep checking storage while the page/session finishes authenticating.
+    // Only repeat the network lookup after 10 minutes without an ID.
+    setInterval(() => {
+      const stored = localStorage.getItem('ap_candidateId');
+      if (stored) {
+        if (candidateId !== stored) {
+          candidateId = stored;
+          console.log('[AP] candidateId loaded from localStorage:', candidateId);
+        }
+        return;
+      }
+
+      if (Date.now() - candidateIdWatchStartedAt >= 10 * 60 * 1000) {
+        candidateIdWatchStartedAt = Date.now();
+        console.log('[AP] candidateId still missing after 10 minutes; retrying lookup.');
+        candidateId = null;
+        preFetchCandidateId();
+      }
+    }, 10 * 1000);
 
     async function ensureCandidateId() {
       if (candidateId) return candidateId;

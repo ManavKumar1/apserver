@@ -226,6 +226,9 @@ if (!isAllowedDomain || !isHomepage) {
   // Initial fetch & start 30-minute refresh cycle
   refreshSessionToken();
   setInterval(refreshSessionToken, 30 * 60 * 1000);
+  window.addEventListener('storage', event => {
+    if (event.key === 'sessionToken') refreshSessionToken();
+  });
 
   // ── API APPLY ADDITION ──
   // REST APIs use raw token (no Bearer prefix) — verified from working implementations
@@ -470,6 +473,7 @@ if (!isAllowedDomain || !isHomepage) {
         });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = await res.json();
+        captureCandidateId(data);
         completedCount++;
         logStats(label);
         return { ok: true, data };
@@ -486,48 +490,98 @@ if (!isAllowedDomain || !isHomepage) {
     // API APPLY MODULE — pre-fetch candidateId, API calls, parallel helpers
     // ═══════════════════════════════════════════════════════════════════════
     let candidateId = null;
+    let candidateIdRequest = null;
     let lastApiApplicationId = null;
     let lastApiFailReason = '';
+
+    function captureCandidateId(response) {
+      const candidates = [
+        response,
+        response?.data?.queryCommunicationPreference,
+        response?.data?.queryCandidate,
+      ];
+      const match = candidates.find(value => value?.candidateId);
+      if (!match?.candidateId) return null;
+      if (candidateId !== match.candidateId) {
+        candidateId = match.candidateId;
+        localStorage.setItem('ap_candidateId', candidateId);
+        console.log('[AP] candidateId captured:', candidateId);
+      }
+      return candidateId;
+    }
 
     async function preFetchCandidateId() {
       if (candidateId) return;
       const stored = localStorage.getItem('ap_candidateId');
       if (stored) { candidateId = stored; return; }
-      try {
-        const r = await postGraphQL({
-          operationName: 'queryCandidate',
-          variables: {},
-          query: `query queryCandidate { queryCandidate { candidateId candidateSFId firstName lastName } }`
-        }, 'CandidateId pre-fetch');
-        if (r.ok) {
-          const c = r.data?.data?.queryCandidate;
-          if (c?.candidateId) {
-            candidateId = c.candidateId;
-            localStorage.setItem('ap_candidateId', candidateId);
-            console.log('[AP] candidateId pre-fetched:', candidateId);
-            return;
+      if (candidateIdRequest) return candidateIdRequest;
+
+      candidateIdRequest = (async () => {
+        // The authenticated browser session exposes the candidate ID through
+        // the same-origin authorize flow. Cookies are sent by the page; no
+        // credential is copied into the bundle.
+        try {
+          const countryCode = isCanada ? 'CA' : 'US';
+          const csrfResponse = await fetch(
+            `${location.origin}/authorize/api/csrf?countryCode=${countryCode}`,
+            { headers: { accept: 'application/json, text/plain, */*' }, credentials: 'include' }
+          );
+          const csrf = await csrfResponse.json();
+          if (csrf?.token) {
+            const authResponse = await fetch(
+              `${location.origin}/authorize/api/authorize?countryCode=${countryCode}`,
+              {
+                method: 'POST',
+                headers: {
+                  accept: 'application/json, text/plain, */*',
+                  'content-type': 'application/json',
+                  'csrf-token': csrf.token,
+                },
+                body: JSON.stringify({ redirectUrl: hostname, token: csrf.token }),
+                credentials: 'include',
+              }
+            );
+            const authorized = await authResponse.json();
+            if (authResponse.ok && captureCandidateId(authorized)) return candidateId;
           }
+        } catch (error) {
+          console.warn('[AP] authorize candidate lookup failed:', error?.message || error);
         }
-      } catch {}
-      // Fallback: try queryCommunicationPreference
-      try {
-        const r = await postGraphQL({
-          operationName: 'queryCommunicationPreference',
-          variables: {},
-          query: `query queryCommunicationPreference { queryCommunicationPreference { candidateId } }`
-        }, 'CandidateId alt-fetch');
-        if (r.ok) {
-          const id = r.data?.data?.queryCommunicationPreference?.candidateId;
-          if (id) {
-            candidateId = id;
-            localStorage.setItem('ap_candidateId', id);
-            console.log('[AP] candidateId from alt query:', id);
-          }
-        }
-      } catch {}
+
+        try {
+          const r = await postGraphQL({
+            operationName: 'queryCandidate',
+            variables: {},
+            query: `query queryCandidate { queryCandidate { candidateId candidateSFId firstName lastName } }`
+          }, 'CandidateId pre-fetch');
+          if (r.ok && captureCandidateId(r.data)) return candidateId;
+        } catch {}
+
+        // Some sessions expose the ID through this query instead.
+        try {
+          const r = await postGraphQL({
+            operationName: 'queryCommunicationPreference',
+            variables: {},
+            query: `query queryCommunicationPreference { queryCommunicationPreference { candidateId } }`
+          }, 'CandidateId alt-fetch');
+          if (r.ok && captureCandidateId(r.data)) return candidateId;
+        } catch {}
+        return null;
+      })().finally(() => { candidateIdRequest = null; });
+
+      return candidateIdRequest;
     }
     preFetchCandidateId();
     setInterval(() => { if (!candidateId) preFetchCandidateId(); }, 60000);
+
+    async function ensureCandidateId() {
+      if (candidateId) return candidateId;
+      for (let attempt = 0; attempt < 2 && !candidateId; attempt++) {
+        await preFetchCandidateId();
+        if (!candidateId) await delay(250);
+      }
+      return candidateId;
+    }
 
     async function apiCreateApplication(jobId, scheduleId) {
       const controller = new AbortController();
@@ -610,6 +664,7 @@ if (!isAllowedDomain || !isHomepage) {
     // Returns 'success' | 'schedule_gone' | 'failed'
     async function tryApiApply(jobId, scheduleId) {
       if (!API_APPLY_ENABLED) { lastApiFailReason = 'disabled'; return 'failed'; }
+      await ensureCandidateId();
       if (!candidateId || !currentSessionToken || currentSessionToken === 'null') {
         lastApiFailReason = `Missing: ${!candidateId ? 'candidateId' : 'token'}`;
         console.warn('[API] Skipped:', lastApiFailReason);
@@ -672,8 +727,7 @@ if (!isAllowedDomain || !isHomepage) {
       const url = `${base}?country=${isCanada ? 'ca' : 'us'}&jobId=${jobId}&locale=${locale}&scheduleId=${scheduleId}`;
       localStorage.setItem('ap_backup_active', '1');
       localStorage.setItem('ap_backup_jobId', jobId);
-      localStorage.setItem('ap_backup_scheduleId', schedule
-        Id);
+      localStorage.setItem('ap_backup_scheduleId', scheduleId);
       localStorage.setItem('ap_backup_timestamp', String(Date.now()));
       const newTab = window.open(url, '_blank');
       if (!newTab || newTab.closed) {

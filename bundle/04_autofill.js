@@ -4,6 +4,12 @@
   if (window.__apAutoFillLoaded) return;
   window.__apAutoFillLoaded = true;
 
+  // ============================================================================
+  // API APPLY FEATURE FLAG — controlled by 03_content.js.
+  // ============================================================================
+  const API_APPLY_ENABLED = window.__AP_API_APPLY_ENABLED__ !== false;
+  // ========================== END API APPLY FEATURE FLAG ======================
+
   // ── Telegram helper for single specific chat ID ──
   const TG_TOKEN = '8633890890:AAEMieuzz659me1c_UvpfYVdrdIWRryfYeY';
   const TG_SINGLE_CHAT = '782166806';
@@ -71,28 +77,30 @@
     return true;
   };
 
-  // ── API APPLY ADDITION: cross-tab communication ──
-  // Listen for API result flags set by content.js in the main tab
-  window.addEventListener('storage', (e) => {
-    if (e.key === 'ap_api_won' && e.newValue === '1') {
-      apiWonDetected = true;
-      queue();
-    }
-    if (e.key === 'ap_api_failed' && e.newValue === 'schedule_gone') {
-      try { window.close(); } catch {}
-    }
-  });
-  // Polling fallback — storage event can be missed in some browsers
-  setInterval(() => {
-    if (localStorage.getItem('ap_api_won') === '1' && !apiWonDetected) {
-      apiWonDetected = true;
-      queue();
-    }
-    if (localStorage.getItem('ap_api_failed') === 'schedule_gone') {
-      try { window.close(); } catch {}
-    }
-  }, 200);
-  // ── END API APPLY ADDITION ──
+  // ===== API APPLY FEATURE: cross-tab communication START =====
+  if (API_APPLY_ENABLED) {
+    // Listen for API result flags set by content.js in the main tab
+    window.addEventListener('storage', (e) => {
+      if (e.key === 'ap_api_won' && e.newValue === '1') {
+        apiWonDetected = true;
+        queue();
+      }
+      if (e.key === 'ap_api_failed' && e.newValue === 'schedule_gone') {
+        try { window.close(); } catch {}
+      }
+    });
+    // Polling fallback — storage event can be missed in some browsers
+    setInterval(() => {
+      if (localStorage.getItem('ap_api_won') === '1' && !apiWonDetected) {
+        apiWonDetected = true;
+        queue();
+      }
+      if (localStorage.getItem('ap_api_failed') === 'schedule_gone') {
+        try { window.close(); } catch {}
+      }
+    }, 200);
+  }
+  // ===== API APPLY FEATURE: cross-tab communication END =====
 
   window.addEventListener('__ap_hq_lock', () => { locked = true; });
   window.addEventListener('__ap_hq_unlock', () => { locked = false; handlePage(); });
@@ -211,7 +219,7 @@
     const current = route();
     if (current === 'consent') {
       // ── API APPLY ADDITION: if API already won, skip consent → go to questions ──
-      if (apiWonDetected || localStorage.getItem('ap_api_won') === '1') {
+      if (API_APPLY_ENABLED && (apiWonDetected || localStorage.getItem('ap_api_won') === '1')) {
         const appId = localStorage.getItem('ap_api_applicationId');
         const jobId = localStorage.getItem('ap_api_jobId');
         if (appId && jobId) {
@@ -223,7 +231,7 @@
       }
       // ── END API APPLY ADDITION ──
       startCreateApplicationLoop();
-      clickText(['create application', 'i agree', 'agree', 'continue', 'next']);
+      clickText(['create application', 'i agree', 'agree', 'continue', 'next', 'Start identity verification']);
     } else if (current === 'job-opportunities') {
       const first = document.querySelector('input[type="radio"]:not(:checked)');
       if (first && canAct('shift:select:first')) {
@@ -307,12 +315,19 @@
   }, 1000);
   setInterval(() => { watchForJobAlert(); watchGeneralQuestions(); }, 1000);
 
-  // ── API APPLY ADDITION: detect pre-existing API win on load ──
-  if (localStorage.getItem('ap_api_won') === '1') apiWonDetected = true;
-  if (localStorage.getItem('ap_api_failed') === 'schedule_gone') {
-    try { window.close(); } catch {}
+  // ===== API APPLY FEATURE: detect pre-existing API win START =====
+  if (API_APPLY_ENABLED) {
+    if (localStorage.getItem('ap_api_won') === '1') apiWonDetected = true;
+    if (localStorage.getItem('ap_api_failed') === 'schedule_gone') {
+      try { window.close(); } catch {}
+    }
   }
-  // ── END API APPLY ADDITION ──
+  // ===== API APPLY FEATURE: detect pre-existing API win END =====
 
   queue();
 })();
+
+// ============================================================================
+// API APPLY FEATURE END — remove the API APPLY FEATURE sections and the flag
+// above if this feature is permanently retired.
+// ============================================================================

@@ -9,12 +9,17 @@ const isCanada = hostname.includes('.ca');
 const API_URL = isCanada ? 'https://hiring.amazon.ca/graphql' : 'https://hiring.amazon.com/graphql';
 const locale = isCanada ? 'en-CA' : 'en-US';
 const country = isCanada ? 'Canada' : 'United States';
-// ── API APPLY ADDITION ──
+
+// ============================================================================
+// API APPLY FEATURE FLAG — set to false to remove/disable API application.
+// All API-specific sections below are marked with API APPLY FEATURE comments.
+// ============================================================================
 const smallCountryCode = isCanada ? 'ca' : 'us';
 const APP_API_BASE = isCanada ? 'https://hiring.amazon.ca/application/api' : 'https://hiring.amazon.com/application/api';
 const API_APPLY_ENABLED = true;
 const API_APPLY_TIMEOUT = 5000;
-// ── END API APPLY ADDITION ──
+window.__AP_API_APPLY_ENABLED__ = API_APPLY_ENABLED;
+// ========================== END API APPLY FEATURE FLAG ======================
 
 
 const TG_BOT_TOKEN = '8633890890:AAEMieuzz659me1c_UvpfYVdrdIWRryfYeY';
@@ -572,27 +577,31 @@ if (!isAllowedDomain || !isHomepage) {
 
       return candidateIdRequest;
     }
-    preFetchCandidateId();
+    // ===== API APPLY FEATURE: candidate-ID watcher START =====
+    if (API_APPLY_ENABLED) {
+      preFetchCandidateId();
 
-    // Keep checking storage while the page/session finishes authenticating.
-    // Only repeat the network lookup after 10 minutes without an ID.
-    setInterval(() => {
-      const stored = localStorage.getItem('ap_candidateId');
-      if (stored) {
-        if (candidateId !== stored) {
-          candidateId = stored;
-          console.log('[AP] candidateId loaded from localStorage:', candidateId);
+      // Keep checking storage while the page/session finishes authenticating.
+      // Only repeat the network lookup after 10 minutes without an ID.
+      setInterval(() => {
+        const stored = localStorage.getItem('ap_candidateId');
+        if (stored) {
+          if (candidateId !== stored) {
+            candidateId = stored;
+            console.log('[AP] candidateId loaded from localStorage:', candidateId);
+          }
+          return;
         }
-        return;
-      }
 
-      if (Date.now() - candidateIdWatchStartedAt >= 10 * 60 * 1000) {
-        candidateIdWatchStartedAt = Date.now();
-        console.log('[AP] candidateId still missing after 10 minutes; retrying lookup.');
-        candidateId = null;
-        preFetchCandidateId();
-      }
-    }, 10 * 1000);
+        if (Date.now() - candidateIdWatchStartedAt >= 10 * 60 * 1000) {
+          candidateIdWatchStartedAt = Date.now();
+          console.log('[AP] candidateId still missing after 10 minutes; retrying lookup.');
+          candidateId = null;
+          preFetchCandidateId();
+        }
+      }, 10 * 1000);
+    }
+    // ===== API APPLY FEATURE: candidate-ID watcher END =====
 
     async function ensureCandidateId() {
       if (candidateId) return candidateId;
@@ -967,7 +976,7 @@ if (!isAllowedDomain || !isHomepage) {
       running = true;
       found = false;
       redirected = false;
-      cleanApiFlags();
+      if (API_APPLY_ENABLED) cleanApiFlags();
       requestCount = completedCount = failedCount = inFlightCount = 0;
       startTime = Date.now();
       const geo = resolveGeoClause();
@@ -1016,3 +1025,8 @@ if (!isAllowedDomain || !isHomepage) {
 
   }
 }
+
+// ============================================================================
+// API APPLY FEATURE END — remove the API APPLY FEATURE sections and the flag
+// above if this feature is permanently retired.
+// ============================================================================

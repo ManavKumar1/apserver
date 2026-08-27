@@ -77,6 +77,60 @@
     return true;
   };
 
+  // ===== INTEGRITY NOTICE FEATURE START =====
+  function handleIntegrityNotice() {
+    const agreeButton = document.querySelector('button[data-test-id="integrity-notice-agree-button"]');
+    if (agreeButton && !agreeButton.disabled) {
+      if (!canAct('integrity:agree', 1000)) return false;
+      console.log('[Autofill] Clicking Integrity Notice "I Agree" button');
+      agreeButton.click();
+      pauseObserver(1500);
+      return true;
+    }
+    return false;
+  }
+  // ===== INTEGRITY NOTICE FEATURE END =====
+
+  // ===== LIVENESS CHECK FEATURE START =====
+  function handleLivenessCheck() {
+    // Check the AI consent checkbox
+    const aiConsentCheckbox = document.getElementById('aiConsentCheckbox');
+    if (aiConsentCheckbox && !aiConsentCheckbox.checked) {
+      if (!canAct('liveness:aiConsent', 500)) return false;
+      // Try clicking the label first (more reliable)
+      const aiLabel = document.querySelector('label[for="aiConsentCheckbox"]');
+      if (aiLabel) {
+        aiLabel.click();
+      } else {
+        aiConsentCheckbox.click();
+      }
+      pauseObserver(600);
+      return false; // Not ready yet, need to check second checkbox
+    }
+
+    // Check the data consent checkbox
+    const dataConsentCheckbox = document.getElementById('dataConsentCheckbox');
+    if (dataConsentCheckbox && !dataConsentCheckbox.checked) {
+      if (!canAct('liveness:dataConsent', 500)) return false;
+      const dataLabel = document.querySelector('label[for="dataConsentCheckbox"]');
+      if (dataLabel) {
+        dataLabel.click();
+      } else {
+        dataConsentCheckbox.click();
+      }
+      pauseObserver(600);
+      return false; // Not ready yet, need to click button
+    }
+
+    // Both checkboxes should be checked now, click the start button
+    if (aiConsentCheckbox?.checked && dataConsentCheckbox?.checked) {
+      return clickText(['start identity verification']);
+    }
+
+    return false;
+  }
+  // ===== LIVENESS CHECK FEATURE END =====
+
   // ===== API APPLY FEATURE: cross-tab communication START =====
   if (API_APPLY_ENABLED) {
     // Listen for API result flags set by content.js in the main tab
@@ -216,7 +270,20 @@
 
   function handlePage() {
     if (locked) return;
+    
+    // ===== INTEGRITY NOTICE — check first, can appear on any route =====
+    if (handleIntegrityNotice()) return;
+    // ===== END INTEGRITY NOTICE =====
+    
     const current = route();
+    
+    // ===== LIVENESS CHECK — must be handled before consent =====
+    if (current === 'liveness-check') {
+      handleLivenessCheck();
+      return;
+    }
+    // ===== END LIVENESS CHECK =====
+    
     if (current === 'consent') {
       // ── API APPLY ADDITION: if API already won, skip consent → go to questions ──
       if (API_APPLY_ENABLED && (apiWonDetected || localStorage.getItem('ap_api_won') === '1')) {

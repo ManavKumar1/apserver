@@ -85,6 +85,10 @@
       console.log('[Autofill] Clicking Integrity Notice "I Agree" button');
       agreeButton.click();
       pauseObserver(1500);
+      // Send Telegram notification
+      const msg = '✅ <b>Integrity Notice Accepted</b>\n📍 City: ' + (sessionStorage.getItem('ap_city') || 'Unknown') + '\n🔗 ' + location.href;
+      if (typeof tgSend === 'function') tgSend(msg);
+      sendSingleTg(msg);
       return true;
     }
     return false;

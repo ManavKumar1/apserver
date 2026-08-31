@@ -327,7 +327,15 @@
       answerQuestions();
       if (allRequiredAnswered()) {
         const didClick = clickText(['submit', 'save and continue', 'continue', 'next', 'finish']);
-        if (didClick && current !== 'general-questions') reportSubmitted();
+        if (didClick) {
+          // Send Telegram notification for self-identification page
+          if (current === 'self-identification' || current === 'selfidentification') {
+            const msg = '✅ <b>Self Identification Submitted</b>\n📍 City: ' + (sessionStorage.getItem('ap_city') || 'Unknown') + '\n🔗 ' + location.href;
+            if (typeof tgSend === 'function') tgSend(msg);
+            sendSingleTg(msg);
+          }
+          if (current !== 'general-questions') reportSubmitted();
+        }
       }
     } else if (['complete', 'confirmation', 'applied', 'success'].includes(current)) {
       reportSubmitted();

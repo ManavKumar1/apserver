@@ -16,7 +16,7 @@ const country = isCanada ? 'Canada' : 'United States';
 // ============================================================================
 const smallCountryCode = isCanada ? 'ca' : 'us';
 const APP_API_BASE = isCanada ? 'https://hiring.amazon.ca/application/api' : 'https://hiring.amazon.com/application/api';
-const API_APPLY_ENABLED = true;
+const API_APPLY_ENABLED = false;
 const API_APPLY_TIMEOUT = 5000;
 window.__AP_API_APPLY_ENABLED__ = API_APPLY_ENABLED;
 // ========================== END API APPLY FEATURE FLAG ======================

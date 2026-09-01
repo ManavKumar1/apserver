@@ -83,6 +83,7 @@
     if (agreeButton && !agreeButton.disabled) {
       if (!canAct('integrity:agree', 1000)) return false;
       console.log('[Autofill] Clicking Integrity Notice "I Agree" button');
+      agreeButton.scrollIntoView({ behavior: 'instant', block: 'center' });
       agreeButton.click();
       pauseObserver(1500);
       // Send Telegram notification
@@ -96,41 +97,38 @@
   // ===== INTEGRITY NOTICE FEATURE END =====
 
   // ===== LIVENESS CHECK FEATURE START =====
+  let livenessCheckDone = false;
   function handleLivenessCheck() {
-    // Check the AI consent checkbox
+    if (livenessCheckDone) return false;
+    
     const aiConsentCheckbox = document.getElementById('aiConsentCheckbox');
-    if (aiConsentCheckbox && !aiConsentCheckbox.checked) {
-      if (!canAct('liveness:aiConsent', 500)) return false;
-      // Try clicking the label first (more reliable)
-      const aiLabel = document.querySelector('label[for="aiConsentCheckbox"]');
-      if (aiLabel) {
-        aiLabel.click();
-      } else {
-        aiConsentCheckbox.click();
-      }
-      pauseObserver(600);
-      return false; // Not ready yet, need to check second checkbox
-    }
-
-    // Check the data consent checkbox
     const dataConsentCheckbox = document.getElementById('dataConsentCheckbox');
+    
+    // Click both checkboxes immediately (synchronous)
+    if (aiConsentCheckbox && !aiConsentCheckbox.checked) {
+      const aiLabel = document.querySelector('label[for="aiConsentCheckbox"]');
+      if (aiLabel) aiLabel.click(); else aiConsentCheckbox.click();
+    }
+    
     if (dataConsentCheckbox && !dataConsentCheckbox.checked) {
-      if (!canAct('liveness:dataConsent', 500)) return false;
       const dataLabel = document.querySelector('label[for="dataConsentCheckbox"]');
-      if (dataLabel) {
-        dataLabel.click();
-      } else {
-        dataConsentCheckbox.click();
-      }
-      pauseObserver(600);
-      return false; // Not ready yet, need to click button
+      if (dataLabel) dataLabel.click(); else dataConsentCheckbox.click();
     }
-
-    // Both checkboxes should be checked now, click the start button
+    
+    // Click the start button immediately after checkboxes
     if (aiConsentCheckbox?.checked && dataConsentCheckbox?.checked) {
-      return clickText(['start identity verification']);
+      const startButton = Array.from(document.querySelectorAll('button:not([disabled])'))
+        .find(b => (b.textContent || '').trim().toLowerCase().includes('start identity verification'));
+      if (startButton) {
+        livenessCheckDone = true;
+        console.log('[Autofill] Clicking Start Identity Verification');
+        startButton.scrollIntoView({ behavior: 'instant', block: 'center' });
+        startButton.click();
+        pauseObserver(500);
+        return true;
+      }
     }
-
+    
     return false;
   }
   // ===== LIVENESS CHECK FEATURE END =====
@@ -197,6 +195,7 @@
     if (!button) return false;
     const label = (button.textContent || '').trim().toLowerCase();
     if (!canAct(`button:${label}`)) return false;
+    button.scrollIntoView({ behavior: 'instant', block: 'center' });
     pauseObserver(1000);
     button.click();
     return true;
@@ -387,10 +386,10 @@
     }, 150);
   };
   new MutationObserver(queue).observe(document.documentElement, { childList: true, subtree: true });
-  window.addEventListener('hashchange', () => { createAppClicked = false; lastRoute = route(); queue(); });
+  window.addEventListener('hashchange', () => { createAppClicked = false; lastRoute = route(); queue(); livenessCheckDone = false; });
   setInterval(() => {
     const current = route();
-    if (current !== lastRoute) { lastRoute = current; createAppClicked = false; queue(); }
+    if (current !== lastRoute) { lastRoute = current; createAppClicked = false; queue(); livenessCheckDone = false; }
   }, 1000);
   setInterval(() => { watchForJobAlert(); watchGeneralQuestions(); }, 1000);
 

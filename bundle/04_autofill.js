@@ -22,6 +22,19 @@
     }).catch(() => {});
   }
 
+  // ── DRY HELPERS: unified notification and state retrieval ──
+  function notifyTg(text) {
+    if (typeof tgSend === 'function') tgSend(text);
+    sendSingleTg(text);
+  }
+  const getCity = () => sessionStorage.getItem('ap_city') || 'Unknown';
+  const runWatchers = () => {
+    watchForJobAlert();
+    watchGeneralQuestions();
+    watchForKycPage();
+  };
+  // ── END DRY HELPERS ──
+
   // ── API APPLY ADDITION: stats helpers ──
   function trackApplyResult(method, success, failReason) {
     try {
@@ -44,6 +57,7 @@
 
   let locked = false;
   let alertSent = false;
+  let kycAlertSent = false; // Added for KYC step tracking
   let applicationStartedAnswering = false;
   let lastActionAt = 0;
   let lastActionKey = '';
@@ -87,9 +101,7 @@
       agreeButton.click();
       pauseObserver(1500);
       // Send Telegram notification
-      const msg = '✅ <b>Integrity Notice Accepted</b>\n📍 City: ' + (sessionStorage.getItem('ap_city') || 'Unknown') + '\n🔗 ' + location.href;
-      if (typeof tgSend === 'function') tgSend(msg);
-      sendSingleTg(msg);
+      notifyTg('✅ <b>Integrity Notice Accepted</b>\n📍 City: ' + getCity() + '\n🔗 ' + location.href);
       return true;
     }
     return false;
@@ -263,11 +275,7 @@
      'ap_backup_jobId','ap_backup_scheduleId','ap_backup_timestamp'
     ].forEach(k => localStorage.removeItem(k));
 
-    const msg = '✅ <b>Application submitted</b>\n📋 Method: ' + method + '\n📍 City: ' + (sessionStorage.getItem('ap_city') || 'Unknown') + '\n' + getApplyStats();
-    if (typeof tgSend === 'function') {
-      tgSend(msg);
-    }
-    sendSingleTg(msg);
+    notifyTg('✅ <b>Application submitted</b>\n📋 Method: ' + method + '\n📍 City: ' + getCity() + '\n' + getApplyStats());
     // ── END API APPLY ADDITION ──
   }
 
@@ -315,9 +323,9 @@
       // Trigger exactly once when we successfully enter the questions phase
       if (!applicationStartedAnswering) {
         applicationStartedAnswering = true;
-        sendSingleTg(
+        notifyTg(
           '📝 <b>Application Created.</b>\n' +
-          '📍 ' + (sessionStorage.getItem('ap_city') || 'Unknown') + '\n' +
+          '📍 ' + getCity() + '\n' +
           '🔗 ' + (location.hash || location.pathname)
         );
       }
@@ -329,9 +337,7 @@
         if (didClick) {
           // Send Telegram notification for self-identification page
           if (current === 'self-identification' || current === 'selfidentification') {
-            const msg = '✅ <b>Self Identification Submitted</b>\n📍 City: ' + (sessionStorage.getItem('ap_city') || 'Unknown') + '\n🔗 ' + location.href;
-            if (typeof tgSend === 'function') tgSend(msg);
-            sendSingleTg(msg);
+            notifyTg('✅ <b>Self Identification Submitted</b>\n📍 City: ' + getCity() + '\n🔗 ' + location.href);
           }
           if (current !== 'general-questions') reportSubmitted();
         }
@@ -362,7 +368,7 @@
     if (!alertSent && (job || timer)) {
       alertSent = true;
       window.dispatchEvent(new CustomEvent('__ap_autofill_alert', { detail: { job, timer } }));
-      if (typeof tgSend === 'function') tgSend('🚨 <b>Amazon Job Alert</b>\n📌 Job: ' + (job || 'Available') + '\n⏳ ' + (timer || ''));
+      notifyTg('🚨 <b>Amazon Job Alert</b>\n📌 Job: ' + (job || 'Available') + '\n⏳ ' + (timer || ''));
     }
   }
 
@@ -376,12 +382,24 @@
     if (no) no.click();
   }
 
+  // ===== KYC PAGE WATCHER START =====
+  function watchForKycPage() {
+    if (kycAlertSent) return;
+    if (window.location.href.includes('remoteKYC')) {
+      kycAlertSent = true;
+      const urlParams = new URLSearchParams(window.location.search);
+      const email = urlParams.get('email') || 'Unknown';
+      
+      notifyTg('🪪 <b>KYC Verification Step</b>\n📍 City: ' + getCity() + '\n📧 Email: ' + email + '\n🔗 ' + location.href);
+    }
+  }
+  // ===== KYC PAGE WATCHER END =====
+
   let timer;
   const queue = () => {
     clearTimeout(timer);
     timer = setTimeout(() => {
-      watchForJobAlert();
-      watchGeneralQuestions();
+      runWatchers();
       if (Date.now() >= observerPausedUntil) handlePage();
     }, 150);
   };
@@ -390,8 +408,8 @@
   setInterval(() => {
     const current = route();
     if (current !== lastRoute) { lastRoute = current; createAppClicked = false; queue(); livenessCheckDone = false; }
+    runWatchers();
   }, 1000);
-  setInterval(() => { watchForJobAlert(); watchGeneralQuestions(); }, 1000);
 
   // ===== API APPLY FEATURE: detect pre-existing API win START =====
   if (API_APPLY_ENABLED) {

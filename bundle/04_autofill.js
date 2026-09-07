@@ -10,6 +10,15 @@
   const API_APPLY_ENABLED = window.__AP_API_APPLY_ENABLED__ !== false;
   // ========================== END API APPLY FEATURE FLAG ======================
 
+  // ── Configurable speed control (ms) ──
+  const SPEED = {
+    livenessBetweenChecks: 300,   // delay between each checkbox click
+    livenessBeforeButton:  400,   // delay after last checkbox before button
+    integrityAfterClick:   1500,  // pause after integrity "I Agree"
+    buttonAfterScroll:     100,    // tiny settle after scrollIntoView
+  };
+  // ── END speed control ──
+
   // ── Telegram helper for single specific chat ID ──
   const TG_TOKEN = '8633890890:AAEMieuzz659me1c_UvpfYVdrdIWRryfYeY';
   const TG_SINGLE_CHAT = '782166806';
@@ -57,7 +66,7 @@
 
   let locked = false;
   let alertSent = false;
-  let kycAlertSent = false; // Added for KYC step tracking
+  let kycAlertSent = false;
   let applicationStartedAnswering = false;
   let lastActionAt = 0;
   let lastActionKey = '';
@@ -98,10 +107,11 @@
       if (!canAct('integrity:agree', 1000)) return false;
       console.log('[Autofill] Clicking Integrity Notice "I Agree" button');
       agreeButton.scrollIntoView({ behavior: 'instant', block: 'center' });
-      agreeButton.click();
-      pauseObserver(1500);
-      // Send Telegram notification
-      notifyTg('✅ <b>Integrity Notice Accepted</b>\n📍 City: ' + getCity() + '\n🔗 ' + location.href);
+      setTimeout(() => {
+        agreeButton.click();
+        pauseObserver(SPEED.integrityAfterClick);
+        notifyTg('✅ <b>Integrity Notice Accepted</b>\n📍 City: ' + getCity() + '\n🔗 ' + location.href);
+      }, SPEED.buttonAfterScroll);
       return true;
     }
     return false;
@@ -112,22 +122,29 @@
   let livenessCheckDone = false;
   function handleLivenessCheck() {
     if (livenessCheckDone) return false;
-    
+
     const aiConsentCheckbox = document.getElementById('aiConsentCheckbox');
     const dataConsentCheckbox = document.getElementById('dataConsentCheckbox');
-    
-    // Click both checkboxes immediately (synchronous)
+
+    // Step 1: Click AI consent checkbox
     if (aiConsentCheckbox && !aiConsentCheckbox.checked) {
       const aiLabel = document.querySelector('label[for="aiConsentCheckbox"]');
       if (aiLabel) aiLabel.click(); else aiConsentCheckbox.click();
+      // Re-queue after delay to proceed to next step
+      pauseObserver(SPEED.livenessBetweenChecks);
+      return false;
     }
-    
+
+    // Step 2: Click data consent checkbox
     if (dataConsentCheckbox && !dataConsentCheckbox.checked) {
       const dataLabel = document.querySelector('label[for="dataConsentCheckbox"]');
       if (dataLabel) dataLabel.click(); else dataConsentCheckbox.click();
+      // Re-queue after delay to proceed to button
+      pauseObserver(SPEED.livenessBeforeButton);
+      return false;
     }
-    
-    // Click the start button immediately after checkboxes
+
+    // Step 3: Click the start button
     if (aiConsentCheckbox?.checked && dataConsentCheckbox?.checked) {
       const startButton = Array.from(document.querySelectorAll('button:not([disabled])'))
         .find(b => (b.textContent || '').trim().toLowerCase().includes('start identity verification'));
@@ -135,19 +152,20 @@
         livenessCheckDone = true;
         console.log('[Autofill] Clicking Start Identity Verification');
         startButton.scrollIntoView({ behavior: 'instant', block: 'center' });
-        startButton.click();
-        pauseObserver(500);
+        setTimeout(() => {
+          startButton.click();
+          pauseObserver(500);
+        }, SPEED.buttonAfterScroll);
         return true;
       }
     }
-    
+
     return false;
   }
   // ===== LIVENESS CHECK FEATURE END =====
 
   // ===== API APPLY FEATURE: cross-tab communication START =====
   if (API_APPLY_ENABLED) {
-    // Listen for API result flags set by content.js in the main tab
     window.addEventListener('storage', (e) => {
       if (e.key === 'ap_api_won' && e.newValue === '1') {
         apiWonDetected = true;
@@ -157,7 +175,6 @@
         try { window.close(); } catch {}
       }
     });
-    // Polling fallback — storage event can be missed in some browsers
     setInterval(() => {
       if (localStorage.getItem('ap_api_won') === '1' && !apiWonDetected) {
         apiWonDetected = true;
@@ -262,21 +279,18 @@
   function reportSubmitted() {
     if (sessionStorage.getItem('ap_autofill_submitted')) return;
     sessionStorage.setItem('ap_autofill_submitted', '1');
-    // ── API APPLY ADDITION: method tracking ──
     const method = apiWonDetected ? 'API + Autofill' : 'Autofill';
     if (apiWonDetected) {
       trackApplyResult('api', true);
     } else {
       trackApplyResult('autofill', true);
     }
-    // Clean cross-tab flags
     ['ap_api_won','ap_api_applicationId','ap_api_jobId','ap_api_time',
      'ap_api_failed','ap_api_fail_reason','ap_backup_active',
      'ap_backup_jobId','ap_backup_scheduleId','ap_backup_timestamp'
     ].forEach(k => localStorage.removeItem(k));
 
     notifyTg('✅ <b>Application submitted</b>\n📋 Method: ' + method + '\n📍 City: ' + getCity() + '\n' + getApplyStats());
-    // ── END API APPLY ADDITION ──
   }
 
   function handlePage() {
@@ -296,7 +310,6 @@
     // ===== END LIVENESS CHECK =====
     
     if (current === 'consent') {
-      // ── API APPLY ADDITION: if API already won, skip consent → go to questions ──
       if (API_APPLY_ENABLED && (apiWonDetected || localStorage.getItem('ap_api_won') === '1')) {
         const appId = localStorage.getItem('ap_api_applicationId');
         const jobId = localStorage.getItem('ap_api_jobId');
@@ -307,7 +320,6 @@
           return;
         }
       }
-      // ── END API APPLY ADDITION ──
       startCreateApplicationLoop();
       clickText(['create application', 'i agree', 'agree', 'continue', 'next', 'Start identity verification']);
     } else if (current === 'job-opportunities') {
@@ -320,7 +332,6 @@
       else clickText(['continue', 'apply', 'next']);
     } else if (current === 'general-questions' || current === 'self-identification' || current === 'selfidentification') {
       
-      // Trigger exactly once when we successfully enter the questions phase
       if (!applicationStartedAnswering) {
         applicationStartedAnswering = true;
         notifyTg(
@@ -335,7 +346,6 @@
       if (allRequiredAnswered()) {
         const didClick = clickText(['submit', 'save and continue', 'continue', 'next', 'finish']);
         if (didClick) {
-          // Send Telegram notification for self-identification page
           if (current === 'self-identification' || current === 'selfidentification') {
             notifyTg('✅ <b>Self Identification Submitted</b>\n📍 City: ' + getCity() + '\n🔗 ' + location.href);
           }
@@ -389,7 +399,6 @@
       kycAlertSent = true;
       const urlParams = new URLSearchParams(window.location.search);
       const email = urlParams.get('email') || 'Unknown';
-      
       notifyTg('🪪 <b>KYC Verification Step</b>\n📍 City: ' + getCity() + '\n📧 Email: ' + email + '\n🔗 ' + location.href);
     }
   }
@@ -422,8 +431,3 @@
 
   queue();
 })();
-
-// ============================================================================
-// API APPLY FEATURE END — remove the API APPLY FEATURE sections and the flag
-// above if this feature is permanently retired.
-// ============================================================================
